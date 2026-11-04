@@ -118,7 +118,13 @@ The pause exists so you can check its work before it spends effort on the remain
 2. **Spot-check one confirmed finding.** Open the report, pick the scariest item, and look at the file and function it names. If the trace is real, you can trust the rest more. If it is wrong, say so now.
 3. **Settle what you already know.** Some unproven items you can answer from experience ("we only ever run one instance"). Tell it, and it confirms or dismisses them.
 4. **Correct its picture of the system** if the Phase 0 summary got your architecture wrong.
-5. **Choose what happens next.** Run `/codedetective` to continue the passes, or run `/codedetective fix P0-01` first if Pass 1 found something urgent.
+5. **Choose what happens next.** The stop ends with a question offering these choices, each with a short reason based on what it found:
+   - **Continue to Pass 2.** Passes 2, 3 and 4 then run one after another without stopping, and the audit ends with its own set of choices.
+   - **Plan the P0 fixes now**, offered when Pass 1 found urgent tasks. Useful when they touch the same code.
+   - **Fix one P0 now**, offered when there is one.
+   - **Stop here.**
+
+   Picking a choice is the same as typing the command, so you never need to remember the syntax. You can also reply with corrections instead, and it applies them before continuing. After a fix or plan made mid-audit, its stop question includes continuing the audit, so you can always get back to the remaining passes.
 
 ## How findings are judged
 
