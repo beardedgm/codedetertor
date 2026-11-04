@@ -87,8 +87,8 @@ Only `fix` ever changes your code, and only after you approve its plan. `plan` n
 
 | Step | What it covers |
 |---|---|
-| **Phase 0: Discovery** | Exact versions of your runtime and frameworks, entry points, data flows, external services, and a run of the analyzers already installed in your project. Decides which checklist items and stack references apply. |
-| **Pass 1: Security** | Authentication, authorization and tenant isolation, injection, XSS, file uploads, imports, secrets, error handling that fails open, logging, rate limits, concurrency, and supply chain. Aligned to OWASP Top 10:2025 and ASVS 5.0. **Stops here for your review.** |
+| **Phase 0: Discovery** | Exact versions of your runtime and frameworks, entry points, data flows, external services, and a run of the analyzers already installed in your project. Writes a short threat model: where untrusted data enters, and what is worth stealing or breaking. Decides which checklist items and stack references apply. |
+| **Pass 1: Security** | Authentication, authorization and tenant isolation, injection, XSS, file uploads, imports, secrets, account deletion, error handling that fails open, logging, rate limits, concurrency, and supply chain. Adds AI and LLM checks (prompt injection, model output, key handling, spend limits) and payment checks (server-side pricing, webhook replay, entitlements) when the app has those features. Aligned to OWASP Top 10:2025 and ASVS 5.0. **Stops here for your review.** |
 | **Pass 2: Performance** | Measured hot paths, blocking work on the event loop, database access patterns, frontend rendering and bundles, long sessions, cleanup, and graceful shutdown. |
 | **Pass 3: Architecture** | Module boundaries, client and server contracts, type rigor, configuration, test integrity, and observability. |
 | **Pass 4: Code quality** | Complexity, duplication, dead code, suppressions, swallowed errors, inconsistent patterns, outdated framework APIs, and patterns typical of AI-generated code. |
@@ -118,8 +118,11 @@ Every observation gets one label:
 | **Unverified** | A real concern the agent could not check because of tooling or environment limits. |
 | **Verified Safeguard** | An existing defense that works, so you know what not to break. |
 | **Not Applicable** | A checklist item your stack does not have. |
+| **Decision Needed** | The right fix depends on a business choice that is yours to make, such as a rate limit or how long to keep data. Listed as a question for you, not queued as a task until you answer. |
 
 Before any security finding or high-priority task is queued, a separate verifier agent sees only the finding and the code and tries to prove it wrong. Findings that are refuted for a recurring reason go into `.audit/false-positives.md` so they are not raised again.
+
+Every checklist item has a stable ID, such as `SEC-03` or `PERF-02`, and every finding and task cites it. That makes two audits of the same repo easy to compare and a repeated finding easy to spot. Many items also carry a caveat: where common advice goes too far, or where a defense only looks like one (an unguessable ID is not access control, a rate limit counted in one server's memory does nothing during a deploy overlap). If your code relies on one of those, that reliance is the finding.
 
 Design and style opinions are reported as advisory notes, never as urgent tasks, and each one must name the simpler alternative.
 
