@@ -1,6 +1,6 @@
 # Pass 3: Architecture, Contracts & Test Integrity
 
-Every item is a hypothesis. Cite the item's ID in every finding, task and plan. Prefer tool evidence from `.audit/evidence/` over reading code by eye. Apply the stack reference files Phase 0 selected.
+Every item is a hypothesis. Cite the item's ID in every finding, task and plan. Prefer tool evidence from the run's `evidence/` folder over reading code by eye. Apply the stack reference files Phase 0 selected.
 
 **ARCH-01 Module Boundaries**
 Documented boundaries hold: shared code free of runtime-specific APIs, no forbidden cross-layer imports, no circular dependencies (see the circular import output).

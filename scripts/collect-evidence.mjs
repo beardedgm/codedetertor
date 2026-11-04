@@ -2,15 +2,24 @@
 // codedetective evidence collector.
 // Runs only analyzers already installed in the project (node_modules/.bin) or on PATH.
 // Never installs, never fixes, never writes outside .audit/evidence/, never prints raw tool output.
-// Usage (from the repository root): node <skill-dir>/scripts/collect-evidence.mjs [--network]
-//   --network  also run tools that query public vulnerability databases (npm audit, osv-scanner)
+// Usage (from the repository root): node <skill-dir>/scripts/collect-evidence.mjs [--out <dir>] [--network]
+//   --out <dir> where to write results (default .audit/evidence); must be inside .audit/
+//   --network   also run tools that query public vulnerability databases (npm audit, osv-scanner)
+// Everything under .audit/ (earlier audits, scratch scripts, harnesses) is excluded from every tool,
+// and filtered out of their results as well, so audit artifacts never count as findings.
 
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
 const root = process.cwd();
-const outDir = path.join(root, '.audit', 'evidence');
+const outArg = process.argv.indexOf('--out');
+const outDir = path.resolve(root, outArg !== -1 && process.argv[outArg + 1] ? process.argv[outArg + 1] : path.join('.audit', 'evidence'));
+const auditRoot = path.join(root, '.audit');
+if (outDir !== auditRoot && !outDir.startsWith(auditRoot + path.sep)) {
+  process.stderr.write('--out must point inside .audit/\n');
+  process.exit(2);
+}
 const allowNetwork = process.argv.includes('--network');
 const isWin = process.platform === 'win32';
 const TIMEOUT_MS = 10 * 60 * 1000;
@@ -18,6 +27,10 @@ const SKIP_DIRS = new Set(['node_modules', '.git', '.audit', 'dist', 'build', 'c
 const CODE_EXT = new Set(['.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.mts', '.cts', '.vue', '.svelte']);
 
 fs.mkdirSync(outDir, { recursive: true });
+
+// True for any path (relative or absolute, either slash style) that lies under .audit/.
+const AUDIT_PATH = /(^|[\\/])\.audit([\\/]|$)/;
+const inAudit = (p) => typeof p === 'string' && AUDIT_PATH.test(path.isAbsolute(p) ? path.relative(root, p) : p);
 
 const exists = (p) => fs.existsSync(path.join(root, p));
 const firstExisting = (list) => list.find(exists);
@@ -78,7 +91,16 @@ function record(tool, status, extra = {}) {
   const bin = findBin('tsc');
   if (!bin) return record('tsc', 'missing');
   const r = run(bin, ['--noEmit', '-p', config, '--pretty', 'false']);
-  const text = r.stdout + r.stderr;
+  // Drop diagnostics (and their indented continuation lines) for files under .audit/.
+  const kept = [];
+  let skipping = false;
+  for (const line of (r.stdout + r.stderr).split(/\r?\n/)) {
+    const head = line.match(/^(\S[^(]*)\(\d+,\d+\): /);
+    if (head) skipping = inAudit(head[1]);
+    else if (!/^\s/.test(line)) skipping = false;
+    if (!skipping) kept.push(line);
+  }
+  const text = kept.join('\n');
   const file = save('tsc.txt', text);
   const errors = (text.match(/error TS\d+/g) || []).length;
   record('tsc', r.timedOut ? 'timeout' : 'ran', { exit: r.code, file, counts: { errors } });
@@ -91,10 +113,14 @@ function record(tool, status, extra = {}) {
   if (!firstExisting(configs) && !pkg.eslintConfig) return record('eslint', 'skipped', { reason: 'no ESLint configuration found' });
   const bin = findBin('eslint');
   if (!bin) return record('eslint', 'missing');
-  const r = run(bin, ['.', '--format', 'json', '--no-error-on-unmatched-pattern']);
-  const file = save('eslint.json', r.stdout || r.stderr);
-  const data = tryJson(r.stdout);
-  if (!Array.isArray(data)) return record('eslint', 'error', { exit: r.code, file, reason: 'output was not JSON; see file' });
+  const r = run(bin, ['.', '--format', 'json', '--no-error-on-unmatched-pattern', '--ignore-pattern', '.audit/**']);
+  const raw = tryJson(r.stdout);
+  if (!Array.isArray(raw)) {
+    const file = save('eslint.json', r.stdout || r.stderr);
+    return record('eslint', 'error', { exit: r.code, file, reason: 'output was not JSON; see file' });
+  }
+  const data = raw.filter((f) => !inAudit(f.filePath));
+  const file = save('eslint.json', JSON.stringify(data));
   const rules = {};
   let errors = 0, warnings = 0;
   for (const f of data) {
@@ -115,9 +141,14 @@ function record(tool, status, extra = {}) {
   const bin = findBin('knip');
   if (!bin) return record('knip', 'missing');
   const r = run(bin, ['--reporter', 'json', '--no-exit-code', '--no-progress']);
-  const file = save('knip.json', r.stdout || r.stderr);
   const data = tryJson(r.stdout);
-  if (!data) return record('knip', 'error', { exit: r.code, file, reason: 'output was not JSON; see file' });
+  if (!data) {
+    const file = save('knip.json', r.stdout || r.stderr);
+    return record('knip', 'error', { exit: r.code, file, reason: 'output was not JSON; see file' });
+  }
+  if (Array.isArray(data.files)) data.files = data.files.filter((f) => !inAudit(f));
+  if (Array.isArray(data.issues)) data.issues = data.issues.filter((i) => !inAudit(i.file));
+  const file = save('knip.json', JSON.stringify(data));
   const counts = { unusedFiles: Array.isArray(data.files) ? data.files.length : 0 };
   for (const issue of data.issues || []) {
     for (const [key, val] of Object.entries(issue)) {
@@ -133,12 +164,13 @@ function record(tool, status, extra = {}) {
   if (!bin) return record('madge', 'missing');
   const dirs = ['src', 'client', 'server', 'shared', 'app', 'lib', 'packages'].filter(exists);
   const targets = dirs.length ? dirs : ['.'];
-  const args = ['--circular', '--json', '--extensions', 'js,jsx,mjs,cjs,ts,tsx'];
+  const args = ['--circular', '--json', '--extensions', 'js,jsx,mjs,cjs,ts,tsx', '--exclude', '(^|/)\\.audit/'];
   const tsconfig = firstExisting(['tsconfig.json', 'jsconfig.json']);
   if (tsconfig) args.push('--ts-config', tsconfig);
   const r = run(bin, [...args, ...targets]);
-  const file = save('madge-circular.json', r.stdout || r.stderr);
-  const data = tryJson(r.stdout);
+  let data = tryJson(r.stdout);
+  if (Array.isArray(data)) data = data.filter((cycle) => !cycle.some(inAudit));
+  const file = save('madge-circular.json', data ? JSON.stringify(data) : (r.stdout || r.stderr));
   record('madge', data ? 'ran' : 'error', { exit: r.code, file, targets, counts: { cycles: Array.isArray(data) ? data.length : null } });
 })();
 
@@ -175,11 +207,13 @@ function record(tool, status, extra = {}) {
   if (!bin) return record('gitleaks', 'missing');
   const reportFile = path.join(outDir, 'gitleaks.json');
   const r = run(bin, ['detect', '--no-banner', '--redact', '--source', '.', '--report-format', 'json', '--report-path', reportFile, '--exit-code', '0']);
-  const data = fs.existsSync(reportFile) ? tryJson(fs.readFileSync(reportFile, 'utf8')) : null;
+  let data = fs.existsSync(reportFile) ? tryJson(fs.readFileSync(reportFile, 'utf8')) : null;
   if (!Array.isArray(data)) {
     // Do not save stdout/stderr here: on error it could echo content. Record only the failure.
     return record('gitleaks', 'error', { exit: r.code, reason: 'no JSON report produced' });
   }
+  data = data.filter((f) => !inAudit(f.File));
+  fs.writeFileSync(reportFile, JSON.stringify(data, null, 2));
   const byRule = {};
   for (const f of data) byRule[f.RuleID || 'unknown'] = (byRule[f.RuleID || 'unknown'] || 0) + 1;
   record('gitleaks', 'ran', { exit: r.code, file: path.relative(root, reportFile), counts: { findings: data.length }, byRule });

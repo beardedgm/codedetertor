@@ -13,6 +13,7 @@ The goal is what an experienced lead developer would call good clean code: secur
 - [Commands](#commands)
 - [How an audit runs](#how-an-audit-runs)
 - [What to do at the Pass 1 stop](#what-to-do-at-the-pass-1-stop)
+- [Audit history](#audit-history)
 - [How findings are judged](#how-findings-are-judged)
 - [When the report is finished](#when-the-report-is-finished)
 - [How planning works](#how-planning-works)
@@ -65,7 +66,7 @@ To update a cloned install, run `git pull` inside that folder.
 2. Optionally create `.audit/context.md` describing your stack and anything that must never be touched (template in `references/report-template.md`). Five lines here noticeably sharpen the audit.
 3. Run `/codedetective`. It profiles the project, gathers tool evidence, runs the security pass, and stops.
 4. Review the Pass 1 summary (see below), then run `/codedetective` again to continue through Passes 2 to 4.
-5. Read the finished report at `.audit/code-health-report.md`. It ends by offering to fix the next task, plan a batch, or stop.
+5. Read the finished report in `.audit/runs/<date>/code-health-report.md`. It ends by offering to fix the next task, plan a batch, or stop.
 6. Run `/codedetective plan` to plan all P0 fixes together, or `/codedetective fix` to plan and fix the top task on its own.
 7. Approve the plan, review the finished fix, then run `/codedetective fix` for the next one.
 
@@ -73,13 +74,14 @@ To update a cloned install, run `git pull` inside that folder.
 
 | Command | What it does |
 |---|---|
-| `/codedetective` | Starts the audit, or resumes it where it stopped. Never starts fixing. |
+| `/codedetective` | Resumes an unfinished audit, or starts a new one if the last audit is complete. Never starts fixing. |
+| `/codedetective new` | Always starts a fresh audit. |
 | `/codedetective pass <1-4>` | Runs or reruns one pass. |
 | `/codedetective plan` | Plans all P0 tasks together in plan mode, for one approval. Changes no code. |
 | `/codedetective plan <P1\|P2\|TASK-IDs>` | Plans another tier, or a list of tasks such as `P0-01 P1-03`. |
 | `/codedetective fix <TASK-ID>` | Plans that one task, waits for your approval, fixes it, then stops for review. |
 | `/codedetective fix` | Same, for the next eligible task in priority order. |
-| `/codedetective status` | Reports progress and counts. Changes nothing. |
+| `/codedetective status` | Reports progress and counts, and lists past audits. Changes nothing. |
 
 Only `fix` ever changes your code, and only after you approve its plan. `plan` never edits anything. Running `/codedetective` after the report is finished just summarizes the queue and waits.
 
@@ -96,6 +98,17 @@ Only `fix` ever changes your code, and only after you approve its plan. `plan` n
 Stack-specific checks load automatically when Phase 0 detects them: Node.js and Express 5, React 19 and Vite, Mongoose and MongoDB, Cloudflare R2 and Render, and Playwright with JSDoc type checking.
 
 Everything is appended to the report after each phase, so an interrupted audit picks up where it left off.
+
+## Audit history
+
+Every audit is a separate run in its own dated folder under `.audit/runs/`, so a new audit always starts fresh and earlier ones stay as history.
+
+- **Resuming.** Running `/codedetective` again continues an audit that hasn't finished, such as one paused at the Pass 1 review. If that audit is more than 3 days old or the code has changed since it started, it asks whether to resume or start over.
+- **Starting fresh.** Once an audit is complete, the next `/codedetective` starts a new one. `/codedetective new` starts a new one any time.
+- **Comparing.** A new audit compares itself with the previous one by checklist ID: what was fixed, what is still open, what is new, and anything that came back after being fixed. Regressions are flagged and ranked first within their priority. Nothing is copied over: every finding is re-verified against today's code.
+- **Fixing.** `fix`, `plan` and `status` work on the current audit's queue, even across several days.
+- **Older files.** If `.audit/` holds files from before runs existed, they are moved into a `legacy` run folder automatically before anything else happens.
+- **Shared across audits.** `context.md` and `false-positives.md` stay at the top of `.audit/`, because they describe the project rather than one audit.
 
 ## What to do at the Pass 1 stop
 
@@ -171,7 +184,7 @@ It never adds a dependency without your approval, and never commits, pushes, dep
 ## Safety guarantees
 
 - **Nothing changes without an approved plan.** Every fix is planned and approved before code is touched, and stops for review after.
-- **Read-only investigation.** No edits, installs, fixers, migrations or seeds during the audit. It writes only inside `.audit/`, which it hides from git through `.git/info/exclude`.
+- **Read-only investigation.** No edits, installs, fixers, migrations or seeds during the audit. It writes only inside `.audit/`, which it hides from git through `.git/info/exclude`, and analyzers never count anything under `.audit/` as part of your code.
 - **Secrets stay hidden.** It checks configuration by variable name only and never prints values. Secret scan results report location and type, never the secret.
 - **Nothing touches production.** Tests, builds and measurement scripts run only after it confirms that every database is local or in-memory and every third-party service is mocked. Anything it cannot confirm, it skips and reports.
 - **No cheating to go green.** It will not hardcode credentials, bypass auth, skip or delete tests, loosen assertions, suppress lint or type errors, bypass git hooks, or swallow errors. If a fix cannot pass without one of those, it stops and tells you.
@@ -180,9 +193,11 @@ It never adds a dependency without your approval, and never commits, pushes, dep
 
 | File | Purpose |
 |---|---|
-| `.audit/code-health-report.md` | The full report and remediation queue. The audit's memory across sessions. |
-| `.audit/evidence/` | Raw analyzer output and a summary. |
-| `.audit/plans/` | Approved plans, one per task or batch. |
+| `.audit/runs/<date>/code-health-report.md` | One audit's full report and remediation queue. The audit's memory across sessions. |
+| `.audit/runs/<date>/evidence/` | That audit's raw analyzer output and a summary. |
+| `.audit/runs/<date>/plans/` | That audit's approved plans, one per task or batch. |
+| `.audit/runs/<date>/scratch/` | Throwaway measurement scripts. |
+| `.audit/current-run` | Which run is current. |
 | `.audit/false-positives.md` | Findings refuted for recurring reasons. Maintained by the skill. |
 | `.audit/context.md` | Optional. Your project context, written by you. |
 
