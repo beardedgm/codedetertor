@@ -3,6 +3,7 @@
 ## Contents
 - Optional developer context file (`.audit/context.md`)
 - False positives file (`.audit/false-positives.md`)
+- Plan files (`.audit/plans/`)
 - Report structure (`.audit/code-health-report.md`)
 - Task schema
 - Progress tracking
@@ -40,6 +41,30 @@ Persistent exclusions, read at the start of every invocation. Add an entry whene
 
 ---
 
+## Plan files
+
+Approved plans are saved here after plan mode, because plan mode's own file does not survive sessions. One file per single-task plan, one per batch.
+
+```markdown
+# Plan: <TASK-ID> | batch-<name>
+- Approved: <date>
+- Against commit: <short hash>
+- Tasks (batch only): <ordered TASK-IDs, noting any prerequisites pulled in>
+
+## Interactions (batch only)
+<shared files or symbols, required order, one fix changing what another must do, combined risk>
+
+## <TASK-ID>: <title>
+- Files and symbols: <path :: symbol, per change>
+- Changes: <what changes in each>
+- Regression test: <file and what it asserts, or how the fix is verified when no test is feasible>
+- Verification: <commands>
+- Risk: <blast radius and containment>
+- Differs from report task: <anything the current code forced to change, or "nothing">
+```
+
+---
+
 ## Report structure
 
 Write `.audit/code-health-report.md` with exactly these sections. Append each pass as you finish it, and keep sections 5 and 6 current as findings accumulate.
@@ -54,6 +79,7 @@ Write `.audit/code-health-report.md` with exactly these sections. Append each pa
 - Pass 3: <...>
 - Pass 4: <...>
 - Remediation: <n of m tasks done; next eligible task ID>
+- Active batch plan: <.audit/plans/batch-<name>.md, tasks remaining | none>
 
 ## 1. Codebase Familiarization & Baseline
 - **Git State:** commit hash, working tree status, pre-existing changes.
@@ -102,7 +128,8 @@ The block below is a format template only. Do not report it, and do not assume a
 TITLE: <Concise, action-oriented title describing the remediation>
 STATUS: <Confirmed | Preventive>
 PRIORITY: <P0 | P1 | P2>
-PROGRESS: <Queued | In progress | Done | Blocked: reason>
+PROGRESS: <Queued | Planned | In progress | Done | Blocked: reason>
+PLAN: <.audit/plans/<file>.md once a plan is approved, or "none">
 SUBSYSTEM: <Comma-separated list of affected areas>
 STANDARD: <OWASP Top 10:2025 category and ASVS 5.0 chapter for security findings, or "n/a">
 TARGET_SYMBOLS:
@@ -134,4 +161,4 @@ VERIFICATION RESULTS:
 
 ## Progress tracking
 
-When a task finishes, set its `PROGRESS` to Done, fill in `VERIFICATION RESULTS`, and update section 0. When a task is blocked (for example it cannot pass without weakening security or tests, or it needs a dependency the user has not approved), set `PROGRESS` to `Blocked: <reason>` and stop. The next eligible task is the first in queue order that is Queued and whose prerequisites are all Done. Mark the Pass 1 review stop as cleared when the user invokes reconnaissance again after it.
+When a plan is approved, set each covered task's `PROGRESS` to Planned and fill in `PLAN`. When a task finishes, set its `PROGRESS` to Done, fill in `VERIFICATION RESULTS`, and update section 0. When a task is blocked (for example it cannot pass without weakening security or tests, or it needs a dependency the user has not approved), set `PROGRESS` to `Blocked: <reason>` and stop. The next eligible task is the first in queue order that is Queued or Planned and whose prerequisites are all Done; while a batch plan is active, take its next task in the batch's order. Mark the Pass 1 review stop as cleared when the user invokes reconnaissance again after it.
