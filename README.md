@@ -23,9 +23,29 @@ The goal is what an experienced lead developer would call good clean code: secur
 
 ## Install
 
-The installed folder must be named `codedetective`, even though this repository is named `codedetertor`.
+**For every project** (recommended):
 
-**For every project** (recommended), clone into your personal skills folder:
+```bash
+npx skills add beardedgm/codedetertor -g -a claude-code
+```
+
+**For one project only**, run this from that project's folder:
+
+```bash
+npx skills add beardedgm/codedetertor -a claude-code
+```
+
+This uses the open [skills](https://github.com/vercel-labs/skills) installer and needs Node.js 22.20 or later. It installs into `~/.claude/skills/codedetective/` (every project) or `.claude/skills/codedetective/` (one project). Leave off `-a claude-code` and it will ask which coding agents to install for.
+
+Start a new Claude Code session and `/codedetective` appears.
+
+To update later:
+
+```bash
+npx skills update codedetective
+```
+
+**Without Node.js**, clone the repository instead. The installed folder must be named `codedetective`:
 
 ```bash
 # macOS or Linux
@@ -35,13 +55,7 @@ git clone https://github.com/beardedgm/codedetertor.git ~/.claude/skills/codedet
 git clone https://github.com/beardedgm/codedetertor.git "$env:USERPROFILE\.claude\skills\codedetective"
 ```
 
-**For one project only**, clone into that project instead:
-
-```bash
-git clone https://github.com/beardedgm/codedetertor.git .claude/skills/codedetective
-```
-
-Start a new Claude Code session and `/codedetective` appears. To update later, run `git pull` inside the installed folder.
+To update a cloned install, run `git pull` inside that folder.
 
 ## Quick start
 
