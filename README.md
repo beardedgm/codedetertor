@@ -2,7 +2,7 @@
 
 A Claude Code skill that gives a codebase a full checkup, then fixes what it finds, one small reviewed change at a time.
 
-Think of it as a home inspection before a renovation. The agent walks through the whole repository looking for security holes, data integrity risks, slow paths, architectural drift, weak tests and messy code. It does not touch anything while it looks. It writes everything into a report, sorts each finding by how well it can be proven, and builds an ordered to-do list of fixes. Fixing starts only when you ask, and it stops for your review after every single fix.
+Think of it as a home inspection before a renovation. The agent walks through the whole repository looking for security holes, data integrity risks, slow paths, architectural drift, weak tests and messy code. It does not touch anything while it looks. It writes everything into a report, sorts each finding by how well it can be proven, and builds an ordered to-do list of fixes. Fixing starts only when you ask. Every fix is planned in Claude Code's plan mode and approved by you before any code changes, and it stops for your review after every single fix.
 
 The goal is what an experienced lead developer would call good clean code: secure, easy to understand, consistent, following current best practice for the versions the project actually uses, and with tests you can trust.
 
@@ -14,6 +14,8 @@ The goal is what an experienced lead developer would call good clean code: secur
 - [How an audit runs](#how-an-audit-runs)
 - [What to do at the Pass 1 stop](#what-to-do-at-the-pass-1-stop)
 - [How findings are judged](#how-findings-are-judged)
+- [When the report is finished](#when-the-report-is-finished)
+- [How planning works](#how-planning-works)
 - [How fixes work](#how-fixes-work)
 - [Safety guarantees](#safety-guarantees)
 - [Files it creates in your project](#files-it-creates-in-your-project)
@@ -63,8 +65,9 @@ To update a cloned install, run `git pull` inside that folder.
 2. Optionally create `.audit/context.md` describing your stack and anything that must never be touched (template in `references/report-template.md`). Five lines here noticeably sharpen the audit.
 3. Run `/codedetective`. It profiles the project, gathers tool evidence, runs the security pass, and stops.
 4. Review the Pass 1 summary (see below), then run `/codedetective` again to continue through Passes 2 to 4.
-5. Read the finished report at `.audit/code-health-report.md`.
-6. Run `/codedetective fix` to fix the highest-priority task. Review it, then repeat.
+5. Read the finished report at `.audit/code-health-report.md`. It ends by offering to fix the next task, plan a batch, or stop.
+6. Run `/codedetective plan` to plan all P0 fixes together, or `/codedetective fix` to plan and fix the top task on its own.
+7. Approve the plan, review the finished fix, then run `/codedetective fix` for the next one.
 
 ## Commands
 
@@ -72,11 +75,13 @@ To update a cloned install, run `git pull` inside that folder.
 |---|---|
 | `/codedetective` | Starts the audit, or resumes it where it stopped. Never starts fixing. |
 | `/codedetective pass <1-4>` | Runs or reruns one pass. |
-| `/codedetective fix <TASK-ID>` | Fixes that one task, then stops for review. |
-| `/codedetective fix` | Fixes the next eligible task in priority order, then stops for review. |
+| `/codedetective plan` | Plans all P0 tasks together in plan mode, for one approval. Changes no code. |
+| `/codedetective plan <P1\|P2\|TASK-IDs>` | Plans another tier, or a list of tasks such as `P0-01 P1-03`. |
+| `/codedetective fix <TASK-ID>` | Plans that one task, waits for your approval, fixes it, then stops for review. |
+| `/codedetective fix` | Same, for the next eligible task in priority order. |
 | `/codedetective status` | Reports progress and counts. Changes nothing. |
 
-Only `fix` ever changes your code. Running `/codedetective` after the report is finished just summarizes the queue and waits.
+Only `fix` ever changes your code, and only after you approve its plan. `plan` never edits anything. Running `/codedetective` after the report is finished just summarizes the queue and waits.
 
 ## How an audit runs
 
@@ -124,23 +129,45 @@ Tasks are prioritized by real consequence:
 - **P1 High:** a measured slowdown, a confirmed race condition, or substantial usability damage.
 - **P2 Hygiene:** types, contracts, duplication, dead code, modernization, and preventive work.
 
+## When the report is finished
+
+After Pass 4, it summarizes the report and asks what you want next:
+
+1. **Fix the next task.** It plans the top task, you approve, and it builds that one fix.
+2. **Plan a batch.** It plans all the P0 tasks (or another tier you name) together. It recommends this when there are several urgent tasks, because seeing them side by side catches fixes that touch the same code.
+3. **Stop here.** You read the report on your own time and come back with `fix` or `plan` later.
+
+## How planning works
+
+No code changes until you approve a plan. Plans use Claude Code's plan mode, which is read-only: Claude asks to switch into it, reads the current code, writes the plan, and submits it for your approval. If you'd rather not switch modes, it shows the same plan in the conversation and waits for your go-ahead.
+
+Every plan names the files and functions it will change, what changes in each, the regression test it will write, how it will verify the fix, and the risk. It also says where the current code forced it to differ from the report. Approved plans are saved in `.audit/plans/`, so they survive between sessions.
+
+**One task at a time.** `/codedetective fix` plans the task, waits for your approval, then builds it.
+
+**A batch.** `/codedetective plan` lays out a group of tasks in the order they must be built, with a short plan for each and a section on how they interact: fixes that touch the same files, an order that matters, or one fix changing what another must do. Approving a batch approves the approach, not the edits. Each task is still built in its own `fix` run, with its own review stop.
+
+**Plans are rechecked before building.** Each fix changes code that later plans were written against. Before building a planned task, it compares the plan with the current code. If nothing material changed, it says so and builds. If a target moved or was renamed, the approach no longer fits, more files are needed, or a dependency would be added, it plans that task again and asks for a fresh approval.
+
 ## How fixes work
 
 Each `fix` run handles exactly one task and then stops. For every fix it:
 
-1. Re-reads the target code, since line numbers drift as earlier fixes land.
-2. Reuses an existing helper instead of writing a new one where possible.
-3. Writes a regression test that fails before the fix, where that is feasible.
-4. Keeps the change to the task's scope. Formatting changes are always a separate task.
-5. Runs the task's verification commands.
-6. Runs `scripts/check-diff.mjs`, which rejects the fix if it skips or deletes tests, adds `.only`, adds `@ts-ignore` or `eslint-disable`, or disables TLS checks, and flags any removed assertions.
-7. Reruns the evidence script and records the before and after numbers.
-8. Marks the task done in the report and waits for your review.
+1. Gets an approved plan first: a new one, or a batch plan that passed the recheck.
+2. Re-reads the target code, since line numbers drift as earlier fixes land.
+3. Reuses an existing helper instead of writing a new one where possible.
+4. Writes a regression test that fails before the fix, where that is feasible.
+5. Builds what the plan says and nothing more. If the work needs to depart from the plan, it stops and re-plans. Formatting changes are always a separate task.
+6. Runs the task's verification commands.
+7. Runs `scripts/check-diff.mjs`, which rejects the fix if it skips or deletes tests, adds `.only`, adds `@ts-ignore` or `eslint-disable`, or disables TLS checks, and flags any removed assertions.
+8. Reruns the evidence script and records the before and after numbers.
+9. Marks the task done in the report and waits for your review.
 
 It never adds a dependency without your approval, and never commits, pushes, deploys or opens a pull request unless you ask.
 
 ## Safety guarantees
 
+- **Nothing changes without an approved plan.** Every fix is planned and approved before code is touched, and stops for review after.
 - **Read-only investigation.** No edits, installs, fixers, migrations or seeds during the audit. It writes only inside `.audit/`, which it hides from git through `.git/info/exclude`.
 - **Secrets stay hidden.** It checks configuration by variable name only and never prints values. Secret scan results report location and type, never the secret.
 - **Nothing touches production.** Tests, builds and measurement scripts run only after it confirms that every database is local or in-memory and every third-party service is mocked. Anything it cannot confirm, it skips and reports.
@@ -152,6 +179,7 @@ It never adds a dependency without your approval, and never commits, pushes, dep
 |---|---|
 | `.audit/code-health-report.md` | The full report and remediation queue. The audit's memory across sessions. |
 | `.audit/evidence/` | Raw analyzer output and a summary. |
+| `.audit/plans/` | Approved plans, one per task or batch. |
 | `.audit/false-positives.md` | Findings refuted for recurring reasons. Maintained by the skill. |
 | `.audit/context.md` | Optional. Your project context, written by you. |
 

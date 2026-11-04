@@ -1,7 +1,7 @@
 ---
 name: codedetective
-description: Evidence-backed code health audit and one-task-at-a-time remediation for a whole repository. Investigates security, data integrity, concurrency, performance, architecture, test integrity and maintainability, grounds findings in tool output and complete traces, has a verifier try to refute each finding, and queues small reviewed fixes toward clean, current, best-practice code. Use when the user runs /codedetective, asks for a full code audit, code health report, tech debt or security review of the whole repo, or wants to resume or fix items from .audit/code-health-report.md. Not for fixing one known bug or reviewing a single diff.
-argument-hint: "[start | pass <1-4> | fix [TASK-ID] | status]"
+description: Evidence-backed code health audit and one-task-at-a-time remediation for a whole repository. Investigates security, data integrity, concurrency, performance, architecture, test integrity and maintainability, grounds findings in tool output and complete traces, has a verifier try to refute each finding, and queues small reviewed fixes toward clean, current, best-practice code. Use when the user runs /codedetective, asks for a full code audit, code health report, tech debt or security review of the whole repo, or wants to resume, plan or fix items from .audit/code-health-report.md. Not for fixing one known bug or reviewing a single diff.
+argument-hint: "[start | pass <1-4> | plan <P0|P1|P2|TASK-IDs> | fix [TASK-ID] | status]"
 disable-model-invocation: true
 ---
 
@@ -17,7 +17,7 @@ The standard for every fix is improvement, not perfection: a good diff measurabl
 
 The work has two stages:
 1. **Reconnaissance:** read-only investigation that produces `.audit/code-health-report.md`.
-2. **Remediation:** executing that report's queue, one reviewed task at a time, only when the user explicitly asks.
+2. **Remediation:** executing that report's queue, one reviewed task at a time, only when the user explicitly asks. Every fix is planned and approved before any code changes.
 
 The report is the case file. It is how the work survives across sessions and context windows, so keep it current and always resume from it rather than from memory.
 
@@ -27,11 +27,12 @@ The report is the case file. It is how the work survives across sessions and con
 |---|---|
 | `/codedetective` or `/codedetective start` | If no report exists, start at Phase 0. If one exists, resume unfinished reconnaissance from where it stopped. If reconnaissance is complete, summarize the queue and wait. |
 | `/codedetective pass <1-4>` | Run or rerun that pass only. |
-| `/codedetective fix <TASK-ID>` | Execute that one task. |
-| `/codedetective fix` (no ID), or `next` | Execute the next eligible task in queue order. |
+| `/codedetective plan <P0\|P1\|P2\|TASK-IDs>` | Plan a batch of tasks in plan mode, in priority and dependency order, for one approval. Read-only: changes no code. Defaults to all P0 tasks when no target is given. |
+| `/codedetective fix <TASK-ID>` | Plan that one task, get approval, then execute it. |
+| `/codedetective fix` (no ID), or `next` | Plan and execute the next eligible task in queue order. |
 | `/codedetective status` | Summarize progress, counts by tier, and queue state. Change nothing. |
 
-**Only `fix` (or `next`) ever starts remediation.** No other invocation authorizes changes to the codebase, including a no-argument resume after reconnaissance is complete. Invoking `/codedetective` again after a reconnaissance stop counts as approval to continue reconnaissance; it never counts as approval to fix. If arguments are ambiguous, state which mode you chose in one line and proceed.
+**Only `fix` (or `next`) ever starts remediation.** `plan` produces plans and never edits code. No other invocation authorizes changes to the codebase, including a no-argument resume after reconnaissance is complete. Invoking `/codedetective` again after a reconnaissance stop counts as approval to continue reconnaissance; it never counts as approval to fix. If arguments are ambiguous, state which mode you chose in one line and proceed.
 
 ## Before anything else
 
@@ -91,18 +92,44 @@ Work in phases and append to the report after each, so progress survives if cont
 
 Write the report using the structure and task schema in `references/report-template.md`.
 
+**End of reconnaissance.** When Pass 4 is written, give the summary and offer three choices, using a multiple-choice question if the tool is available:
+1. **Fix the next task:** plan the top eligible task, get approval, and build it.
+2. **Plan a batch:** plan all P0 tasks (or another tier or set the user names) together, for one approval. Recommend this when there are several P0 or P1 tasks, because seeing them together catches fixes that touch the same code.
+3. **Stop here:** leave the report for the user to read.
+
+Choosing option 1 or 2 counts as invoking `fix` or `plan`. Anything else, including silence, means stop.
+
+## Planning
+
+Plans are where the user reviews a fix before any code changes, so a plan must be specific enough to approve or reject on its own: the files and symbols it will touch, what changes in each, the regression test, the verification commands, and the risk. A plan is not a restatement of the task; it is the task checked against the code as it is right now.
+
+**Use Claude Code's plan mode.** Request it with the plan mode tool; the user approves the switch. In plan mode you can only read, so explore the current code, write the plan, and submit it for approval. If plan mode is unavailable or the user declines the switch, present the same plan in the conversation and wait for an explicit go-ahead. Either way, never edit code before a plan is approved.
+
+**Save approved plans.** Plan mode keeps its own plan file, which does not survive sessions, so after approval copy the plan into `.audit/plans/<TASK-ID>.md` (or `.audit/plans/batch-<name>.md`), link it from the task's `PLAN` field, and set the task's progress to Planned.
+
+**Single-task plan (inside `fix`).** Covers one task. On approval, execute it under the remediation rules below. If the user asks for changes, revise and resubmit; nothing is edited until a version is approved.
+
+**Batch plan (`plan` mode).** Covers a tier or a named set of tasks:
+1. Select the tasks and add any unfinished prerequisites they depend on, marking which were pulled in.
+2. Order them by prerequisites first, then priority.
+3. Read the current code for every task, then write one plan: the build order, a short per-task plan, and a section on interactions between tasks (shared files or symbols, an order that matters, one fix that changes what another must do, combined risk).
+4. On approval, save it and mark every included task Planned. Then stop and tell the user that `/codedetective fix` builds the first one. Approving a batch plan approves the approach, not the edits; each task is still built in its own `fix` run with its own review stop.
+
+**Drift check before building a planned task.** Earlier fixes change the code a later plan was written against. Before building a task that already has an approved plan, re-read its targets and compare. The plan is still valid unless there is a material change: a target symbol moved, was renamed or was deleted; the approach no longer fits; the fix now needs files beyond the plan; the regression test cannot be written as planned; or a dependency would be added. With no material change, say in one line that the approved plan still holds and build it. With a material change, enter plan mode again for that task and get a fresh approval.
+
 ## Remediation (fix mode only)
 
 1. Implement exactly one task per invocation, and only one whose prerequisites are done.
-2. Re-read the target files and symbols before writing code. Report line numbers drift as other fixes land.
-3. Before adding any helper or abstraction, search for an existing equivalent and reuse it. A new abstraction needs at least two real call sites.
-4. Never add or upgrade a dependency without the user's explicit approval and a check that the exact package name exists in the registry with a credible history. Never install a package name you proposed yourself without that confirmation; AI-suggested package names are sometimes invented, and attackers register them.
-5. Where feasible, write or update a focused regression test that fails before the fix. For preventive or structural work where nothing can be reproduced, state how the fix is verified.
-6. Keep the diff to what the task names, roughly a handful of files. Formatting or style changes go in their own task, never mixed with behavior changes.
-7. Run the task's verification commands under the same isolation rules as reconnaissance.
-8. Run `node "${CLAUDE_SKILL_DIR}/scripts/check-diff.mjs"`. It fails if the diff adds test skips or focus markers, lint or type suppression comments, removes assertions, or deletes test files. A failure means the fix is rejected: revert that part and find a real fix, or stop and report the blocker.
-9. Rerun the evidence script and record the before and after delta in the task (errors, suppressions, duplication, complexity). A fix that makes the numbers worse needs a stated reason.
-10. Mark the task done in the report with its verification results, then stop and ask the user to review before the next task.
+2. Get an approved plan first. If the task has none, plan it in plan mode. If it has one from a batch, run the drift check. Never write code without an approved, current plan.
+3. Re-read the target files and symbols before writing code. Report line numbers drift as other fixes land.
+4. Before adding any helper or abstraction, search for an existing equivalent and reuse it. A new abstraction needs at least two real call sites.
+5. Never add or upgrade a dependency without the user's explicit approval and a check that the exact package name exists in the registry with a credible history. Never install a package name you proposed yourself without that confirmation; AI-suggested package names are sometimes invented, and attackers register them.
+6. Where feasible, write or update a focused regression test that fails before the fix. For preventive or structural work where nothing can be reproduced, state how the fix is verified.
+7. Build what the approved plan says, and keep the diff to it, roughly a handful of files. If the work turns out to need a material departure from the plan, stop and re-plan rather than improvise. Formatting or style changes go in their own task, never mixed with behavior changes.
+8. Run the task's verification commands under the same isolation rules as reconnaissance.
+9. Run `node "${CLAUDE_SKILL_DIR}/scripts/check-diff.mjs"`. It fails if the diff adds test skips or focus markers, lint or type suppression comments, removes assertions, or deletes test files. A failure means the fix is rejected: revert that part and find a real fix, or stop and report the blocker.
+10. Rerun the evidence script and record the before and after delta in the task (errors, suppressions, duplication, complexity). A fix that makes the numbers worse needs a stated reason.
+11. Mark the task done in the report with its verification results, then stop and ask the user to review before the next task.
 
 **Never weaken security or test integrity to make a check pass.** That includes hardcoding tokens or credentials, disabling TLS verification, commenting out or bypassing auth middleware, skipping or deleting tests, loosening assertions, adding suppression comments, bypassing git hooks, and catching and swallowing errors. These shortcuts convert a visible problem into an invisible one. If a task cannot pass without one of them, stop and report the blocker.
 
