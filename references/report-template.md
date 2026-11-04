@@ -34,6 +34,7 @@ Persistent exclusions, read at the start of every invocation. Add an entry whene
 ```markdown
 # False Positives
 ## <Short name>
+- Checklist ID: <e.g. QUAL-03>
 - Pattern: <what the finding looked like, e.g. "dead export flagged in server/routes/*.js">
 - Reason: <why it is not a real issue, e.g. "routes are loaded dynamically by the router index">
 - Added: <date>, during <pass or task ID>
@@ -67,7 +68,7 @@ Approved plans are saved here after plan mode, because plan mode's own file does
 
 ## Report structure
 
-Write `.audit/code-health-report.md` with exactly these sections. Append each pass as you finish it, and keep sections 5 and 6 current as findings accumulate.
+Write `.audit/code-health-report.md` with exactly these sections. Append each pass as you finish it, and keep sections 6 and 7 current as findings accumulate.
 
 ```markdown
 # <Project Name>: Code Health & Self-Remediation Plan
@@ -85,28 +86,32 @@ Write `.audit/code-health-report.md` with exactly these sections. Append each pa
 - **Git State:** commit hash, working tree status, pre-existing changes.
 - **Stack Profile:** exact versions of runtime, frameworks, ODM or driver, build tool, test runner.
 - **Architecture Summary:** entry points, module boundaries, main data flows, external services.
+- **Threat Model:** trust boundaries (where untrusted data enters) and assets (what is worth stealing or breaking).
 - **Context Verification:** each developer-supplied claim marked verified, false, or unverifiable.
-- **Applicability Map:** items that apply, items Not Applicable (with reasons), project-specific hypotheses added, stack reference files loaded.
+- **Applicability Map:** items that apply, items Not Applicable (with reasons, by ID), conditional sections that apply, project-specific hypotheses added, stack reference files loaded.
 - **Evidence Baseline:** the evidence script summary (tools run, tools missing, tools skipped and why, key counts). Tools that would help but are not installed are listed as recommendations; never install them during reconnaissance.
 - **Baseline Checks:** build, type check, lint and test commands that were safe to run, with results. Separate pre-existing failures from audit limitations, and list commands skipped for isolation reasons.
 
 ## 2. Verified Safeguards
-Existing defenses confirmed working, with file locations.
+Existing defenses confirmed working, with file locations and the checklist ID each satisfies.
 
 ## 3. Probable & Unverified Findings
 For each:
-- **Topic & File Location:**
+- **Checklist ID, Topic & File Location:**
 - **Tier:** Probable | Unverified
 - **Observed Indicator:** why it was flagged.
 - **Next Step:** the specific command, trace or environment that would confirm or dismiss it.
 
-## 4. Advisory Maintainability Notes
+## 4. Decisions Needed
+Questions only the developer can answer, where the right fix depends on a business choice. For each: the checklist ID, what was found, the choice to make, and the options with their trade-offs. Once answered, a decision may become a task.
+
+## 5. Advisory Maintainability Notes
 Judgment findings from Pass 4. For each: the location, the issue, the concrete simpler alternative, and its rough diff size. These never become P0 or P1 tasks; the developer may promote any of them into the queue as P2.
 
-## 5. Top Systemic Risks
+## 6. Top Systemic Risks
 Up to five highest-impact Confirmed risks. If fewer than five meet the bar, list only those.
 
-## 6. Ordered Remediation Queue
+## 7. Ordered Remediation Queue
 Tasks in the schema below.
 ```
 
@@ -130,6 +135,7 @@ STATUS: <Confirmed | Preventive>
 PRIORITY: <P0 | P1 | P2>
 PROGRESS: <Queued | Planned | In progress | Done | Blocked: reason>
 PLAN: <.audit/plans/<file>.md once a plan is approved, or "none">
+CHECK_ID: <Checklist ID, e.g. SEC-03, or PROJ-NN for a project-specific finding>
 SUBSYSTEM: <Comma-separated list of affected areas>
 STANDARD: <OWASP Top 10:2025 category and ASVS 5.0 chapter for security findings, or "n/a">
 TARGET_SYMBOLS:
