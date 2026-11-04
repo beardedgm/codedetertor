@@ -3,8 +3,9 @@
 ## Contents
 - Optional developer context file (`.audit/context.md`)
 - False positives file (`.audit/false-positives.md`)
-- Plan files (`.audit/plans/`)
-- Report structure (`.audit/code-health-report.md`)
+- Plan files (`plans/` in the run folder)
+- Report structure (`code-health-report.md` in the run folder)
+- Since last audit
 - Task schema
 - Progress tracking
 
@@ -44,7 +45,7 @@ Persistent exclusions, read at the start of every invocation. Add an entry whene
 
 ## Plan files
 
-Approved plans are saved here after plan mode, because plan mode's own file does not survive sessions. One file per single-task plan, one per batch.
+Approved plans are saved in the current run's `plans/` folder after plan mode, because plan mode's own file does not survive sessions. One file per single-task plan, one per batch.
 
 ```markdown
 # Plan: <TASK-ID> | batch-<name>
@@ -68,19 +69,22 @@ Approved plans are saved here after plan mode, because plan mode's own file does
 
 ## Report structure
 
-Write `.audit/code-health-report.md` with exactly these sections. Append each pass as you finish it, and keep sections 6 and 7 current as findings accumulate.
+Write `code-health-report.md` in the current run's folder (`.audit/runs/<run-id>/`) with exactly these sections. Append each pass as you finish it, and keep sections 7 and 8 current as findings accumulate.
 
 ```markdown
 # <Project Name>: Code Health & Self-Remediation Plan
 
 ## 0. Progress
+- Run: <run-id>, started <date and time> against commit <short hash>
+- Status: <unfinished | complete | abandoned>
+- Previous run: <run-id, or "none">
 - Phase 0: <done | in progress | not started>
 - Pass 1: <...> (review stop: <pending | cleared>)
 - Pass 2: <...>
 - Pass 3: <...>
 - Pass 4: <...>
 - Remediation: <n of m tasks done; next eligible task ID>
-- Active batch plan: <.audit/plans/batch-<name>.md, tasks remaining | none>
+- Active batch plan: <plans/batch-<name>.md, tasks remaining | none>
 
 ## 1. Codebase Familiarization & Baseline
 - **Git State:** commit hash, working tree status, pre-existing changes.
@@ -108,10 +112,18 @@ Questions only the developer can answer, where the right fix depends on a busine
 ## 5. Advisory Maintainability Notes
 Judgment findings from Pass 4. For each: the location, the issue, the concrete simpler alternative, and its rough diff size. These never become P0 or P1 tasks; the developer may promote any of them into the queue as P2.
 
-## 6. Top Systemic Risks
+## 6. Since Last Audit
+Only when there is a previous run. Match findings by checklist ID and location, after every finding in this run has been verified on its own. List:
+- **Fixed:** in the previous run, not found now (note whether its task was marked Done).
+- **Still open:** found in both runs.
+- **Regressed:** a task marked Done in the previous run, found again now. Flag these in the queue and rank them ahead of other tasks of the same priority.
+- **New:** found now, not in the previous run.
+- **Not compared:** previous findings that could not be matched (changed IDs, a legacy run, moved code).
+
+## 7. Top Systemic Risks
 Up to five highest-impact Confirmed risks. If fewer than five meet the bar, list only those.
 
-## 7. Ordered Remediation Queue
+## 8. Ordered Remediation Queue
 Tasks in the schema below.
 ```
 
@@ -134,7 +146,7 @@ TITLE: <Concise, action-oriented title describing the remediation>
 STATUS: <Confirmed | Preventive>
 PRIORITY: <P0 | P1 | P2>
 PROGRESS: <Queued | Planned | In progress | Done | Blocked: reason>
-PLAN: <.audit/plans/<file>.md once a plan is approved, or "none">
+PLAN: <plans/<file>.md in the run folder once a plan is approved, or "none">
 CHECK_ID: <Checklist ID, e.g. SEC-03, or PROJ-NN for a project-specific finding>
 SUBSYSTEM: <Comma-separated list of affected areas>
 STANDARD: <OWASP Top 10:2025 category and ASVS 5.0 chapter for security findings, or "n/a">
