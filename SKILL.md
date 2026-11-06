@@ -111,7 +111,13 @@ Only Confirmed issues, or preventive hardening you explicitly justify, may enter
 
 Work in phases and append to the report after each, so progress survives if context runs out. For large repositories you may fan out read-only subagents to sweep and locate code, but a subagent's summary is a lead, not evidence; verify it before it gets a tier.
 
-**Stop after Pass 1.** Summarize what you found and wait. Security findings are the ones most likely to change priorities, so the developer should see them early.
+**Stop after Pass 1.** Security findings are the ones most likely to change priorities, so the developer should see them before you spend effort on the rest. Give the summary, say where the audit stands ("Pass 1 of 4 done"), and end with a question, not a list of commands. Use a multiple-choice question when the tool is available, with a one-line reason under each option drawn from what you found:
+1. **Continue to Pass 2** (recommended unless something below is urgent).
+2. **Plan the P0 fixes now**, before finishing the audit. Offer this only when Pass 1 queued P0 tasks, and say if they touch the same code.
+3. **Fix one P0 now.** Offer this only when there is a P0, naming the one you would start with.
+4. **Stop here.**
+
+Also tell the user, in one line, that they can instead reply with corrections (a finding that is wrong, something they already know about the system), and you will apply them before continuing. Choosing an option counts as invoking that mode (`/codedetective`, `plan`, `fix`). Anything else, including silence, means stop. Without a multiple-choice tool, ask the same question in plain text.
 
 - **Phase 0: Discovery & Stack Profile.** Record exact versions of the runtime, frameworks, database driver or ODM, build tool and test runner. Map entry points, module boundaries, main data flows, and every external service with its per-environment configuration. Verify each developer-supplied claim. Run the evidence script. Write a short **Threat Model**: the trust boundaries (every place untrusted data enters, including uploads, webhooks, third-party responses and model output) and the assets worth stealing or breaking (accounts, personal data, payments, admin actions, paid API spend). Pass 1 works along these boundaries toward these assets. Then produce an **Applicability Map**: which checklist items apply, which do not, which conditional sections apply (AI and LLM features, payments), which project-specific hypotheses deserve extra scrutiny, and which stack reference files apply.
 - **Pass 1: Security, Authorization & Data Integrity.** Read `references/pass-1-security.md`.
@@ -122,6 +128,8 @@ Work in phases and append to the report after each, so progress survives if cont
 **Stack reference files.** Load only the ones Phase 0 shows apply, and use them alongside every pass: `references/stack-node-express.md`, `references/stack-react-vite.md`, `references/stack-mongoose.md`, `references/stack-r2-render.md`, `references/stack-playwright-jsdoc.md`. Each was written against versions current in late 2026; compare against the versions you recorded, and treat any claim marked "verify" as Unverified until confirmed in the repo or the official changelog.
 
 Write the report using the structure and task schema in `references/report-template.md`.
+
+**Passes 2 to 4 run without stopping.** After Pass 1 is cleared, run Passes 2, 3 and 4 in one go, appending each to the report, unless the context runs low, in which case stop, say which pass is next, and ask whether to continue.
 
 **End of reconnaissance.** When Pass 4 is written, the run is complete. If there is a previous run, write the "Since last audit" comparison. Then give the summary and offer three choices, using a multiple-choice question if the tool is available:
 1. **Fix the next task:** plan the top eligible task, get approval, and build it.
@@ -144,7 +152,7 @@ Plans are where the user reviews a fix before any code changes, so a plan must b
 1. Select the tasks and add any unfinished prerequisites they depend on, marking which were pulled in.
 2. Order them by prerequisites first, then priority.
 3. Read the current code for every task, then write one plan: the build order, a short per-task plan, and a section on interactions between tasks (shared files or symbols, an order that matters, one fix that changes what another must do, combined risk).
-4. On approval, save it and mark every included task Planned. Then stop and tell the user that `/codedetective fix` builds the first one. Approving a batch plan approves the approach, not the edits; each task is still built in its own `fix` run with its own review stop.
+4. On approval, save it and mark every included task Planned. Then stop and ask, multiple choice when available: build the first task now, continue the audit at the next pass if it is unfinished, or stop. Approving a batch plan approves the approach, not the edits; each task is still built in its own `fix` run with its own review stop.
 
 **Drift check before building a planned task.** Earlier fixes change the code a later plan was written against. Before building a task that already has an approved plan, re-read its targets and compare. The plan is still valid unless there is a material change: a target symbol moved, was renamed or was deleted; the approach no longer fits; the fix now needs files beyond the plan; the regression test cannot be written as planned; or a dependency would be added. With no material change, say in one line that the approved plan still holds and build it. With a material change, enter plan mode again for that task and get a fresh approval.
 
@@ -160,7 +168,7 @@ Plans are where the user reviews a fix before any code changes, so a plan must b
 8. Run the task's verification commands under the same isolation rules as reconnaissance.
 9. Run `node "${CLAUDE_SKILL_DIR}/scripts/check-diff.mjs"`. It fails if the diff adds test skips or focus markers, lint or type suppression comments, removes assertions, or deletes test files. A failure means the fix is rejected: revert that part and find a real fix, or stop and report the blocker.
 10. Rerun the evidence script with the same `--out` and record the before and after delta in the task (errors, suppressions, duplication, complexity). A fix that makes the numbers worse needs a stated reason.
-11. Mark the task done in the report with its verification results, then stop and ask the user to review before the next task.
+11. Mark the task done in the report with its verification results, then stop and ask the user to review before the next task. End with a question, multiple choice when available: fix the next task, and, if the run's audit is unfinished, continue the audit at the next pass; plus stop. Name the next task and the next pass in the options.
 
 **Never weaken security or test integrity to make a check pass.** That includes hardcoding tokens or credentials, disabling TLS verification, commenting out or bypassing auth middleware, skipping or deleting tests, loosening assertions, adding suppression comments, bypassing git hooks, and catching and swallowing errors. These shortcuts convert a visible problem into an invisible one. If a task cannot pass without one of them, stop and report the blocker.
 
@@ -168,4 +176,4 @@ Never commit, push, deploy or open a pull request unless the user asks for it.
 
 ## Talking to the user
 
-At each stop, give a short spoken-style summary: which run you are working in (and whether it is new or resumed), what you examined, the most important Confirmed findings, how many items landed in each tier, any Decisions Needed that are waiting on the user, which tools were missing or skipped, and what comes next. Point to the report rather than pasting it. Say plainly what was not checked and why; the user needs to know the gaps as much as the findings.
+At each stop, give a short spoken-style summary: which run you are working in (and whether it is new or resumed), where the audit stands (for example "Pass 1 of 4 done"), what you examined, the most important Confirmed findings, how many items landed in each tier, any Decisions Needed that are waiting on the user, which tools were missing or skipped, and what comes next. Point to the report rather than pasting it. End every stop with a question offering the next steps, never just a list of commands to type. Say plainly what was not checked and why; the user needs to know the gaps as much as the findings.
