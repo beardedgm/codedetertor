@@ -200,13 +200,20 @@ Each `fix` run handles exactly one task and then stops. For every fix it:
 
 1. Gets an approved plan first: a new one, or a batch plan that passed the recheck.
 2. Re-reads the target code, since line numbers drift as earlier fixes land.
-3. Reuses an existing helper instead of writing a new one where possible.
-4. Writes a regression test that fails before the fix, where that is feasible.
-5. Builds what the plan says and nothing more. If the work needs to depart from the plan, it stops and re-plans. Formatting changes are always a separate task.
-6. Runs the task's verification commands.
-7. Runs `scripts/check-diff.mjs`, which rejects the fix if it skips or deletes tests, adds `.only`, adds `@ts-ignore` or `eslint-disable`, or disables TLS checks, and flags any removed assertions.
-8. Reruns the evidence script and records the before and after numbers.
-9. Marks the task done in the report and waits for your review.
+3. Takes a snapshot of your working tree, including any edits you haven't committed, so only this fix's own changes are judged afterward.
+4. Reuses an existing helper instead of writing a new one where possible.
+5. Writes a regression test that fails before the fix, where that is feasible.
+6. Builds what the plan says and nothing more. If the work needs to depart from the plan, it stops and re-plans. Formatting changes are always a separate task.
+7. Runs the task's verification commands.
+8. Runs `scripts/check-diff.mjs` against the snapshot. It rejects the fix if it:
+   - skips, focuses, deletes, or moves tests out of the test folders (JavaScript, Python, Go and Rust forms)
+   - adds `@ts-ignore` or `@ts-nocheck`, or any other suppression comment without a written reason
+   - changes a config file that can switch checks off (tsconfig, ESLint, test-runner, CI, git hooks) without the plan naming it
+   - disables TLS checks, or uses `--no-verify` or `--passWithNoTests`
+
+   It flags for your review any suppression that does carry a reason, removed assertions, empty catch blocks, and manifest changes. It never undoes anything that was in the snapshot.
+9. Reruns the evidence script into its own folder and records a before-and-after table, so the original evidence is never overwritten.
+10. Marks the task done in the report and waits for your review.
 
 It never adds a dependency without your approval, and never commits, pushes, deploys or opens a pull request unless you ask.
 
@@ -240,7 +247,12 @@ npm install --save-dev typescript eslint knip madge jscpd
 
 For React projects, also enable `eslint-plugin-react-hooks` (recommended preset) and `eslint-plugin-sonarjs` for complexity. Install `gitleaks` separately for secret scanning.
 
-Tools that send data to public vulnerability databases (`npm audit`, `osv-scanner`) run only if you agree.
+Tools that send data to public vulnerability databases (`npm audit`, `pnpm audit`, `osv-scanner`) run only if you agree.
+
+A few details worth knowing:
+- **Project references are followed.** The type check checks every project a solution-style `tsconfig.json` points to, such as the default Vite layout. If it ends up checking zero files, it says so, rather than reporting zero errors.
+- **Build output can be secret-scanned.** Pass `--scan-dir dist` after a local build. gitleaks scans it with values redacted, so a found secret is never printed.
+- **Non-JavaScript code is partly covered.** The built-in scan for suppressions and skipped tests also covers Python, Go, Rust and several other languages. If it finds no source files at all, it reports "not applicable", not a clean result.
 
 ## Repository layout
 

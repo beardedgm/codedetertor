@@ -2,14 +2,18 @@
 // codedetective evidence collector.
 // Runs only analyzers already installed in the project (node_modules/.bin) or on PATH.
 // Never installs, never fixes, never writes outside .audit/evidence/, never prints raw tool output.
-// Usage (from the repository root): node <skill-dir>/scripts/collect-evidence.mjs [--out <dir>] [--network]
-//   --out <dir> where to write results (default .audit/evidence); must be inside .audit/
-//   --network   also run tools that query public vulnerability databases (npm audit, osv-scanner)
+// Usage (from the repository root):
+//   node <skill-dir>/scripts/collect-evidence.mjs [--out <dir>] [--compare <dir>] [--scan-dir <dir>] [--network]
+//   --out <dir>       where to write results (default .audit/evidence); must be inside .audit/
+//   --compare <dir>   an earlier output folder; adds a before/after table of the key counts
+//   --scan-dir <dir>  also secret-scan a build output folder (e.g. dist) with gitleaks, values redacted
+//   --network         also run tools that query public vulnerability databases (npm audit, pnpm audit, osv-scanner)
 // Everything under .audit/ (earlier audits, scratch scripts, harnesses) is excluded from every tool,
 // and filtered out of their results as well, so audit artifacts never count as findings.
 
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 const root = process.cwd();
@@ -21,10 +25,19 @@ if (outDir !== auditRoot && !outDir.startsWith(auditRoot + path.sep)) {
   process.exit(2);
 }
 const allowNetwork = process.argv.includes('--network');
+const argValue = (flag) => {
+  const i = process.argv.indexOf(flag);
+  return i !== -1 && process.argv[i + 1] ? process.argv[i + 1] : null;
+};
+const compareDir = argValue('--compare');
+const scanDir = argValue('--scan-dir');
 const isWin = process.platform === 'win32';
 const TIMEOUT_MS = 10 * 60 * 1000;
 const SKIP_DIRS = new Set(['node_modules', '.git', '.audit', 'dist', 'build', 'coverage', '.next', '.turbo', '.cache', 'out', 'vendor', 'playwright-report', 'test-results']);
-const CODE_EXT = new Set(['.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.mts', '.cts', '.vue', '.svelte']);
+const CODE_EXT = new Set([
+  '.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.mts', '.cts', '.vue', '.svelte',
+  '.py', '.go', '.rs', '.rb', '.java', '.kt', '.cs', '.php', '.swift',
+]);
 
 fs.mkdirSync(outDir, { recursive: true });
 
@@ -85,25 +98,64 @@ function record(tool, status, extra = {}) {
 }
 
 // 1. Type checker
+// Solution-style configs ("files": [] plus "references", the default Vite layout) check nothing with -p,
+// so every referenced project is expanded and checked on its own. Build info goes to a temp folder,
+// never into the repository. A run that checked zero project files is reported as such, never as 0 errors.
 (() => {
   const config = firstExisting(['tsconfig.json', 'jsconfig.json']);
   if (!config) return record('tsc', 'skipped', { reason: 'no tsconfig.json or jsconfig.json' });
   const bin = findBin('tsc');
   if (!bin) return record('tsc', 'missing');
-  const r = run(bin, ['--noEmit', '-p', config, '--pretty', 'false']);
-  // Drop diagnostics (and their indented continuation lines) for files under .audit/.
-  const kept = [];
-  let skipping = false;
-  for (const line of (r.stdout + r.stderr).split(/\r?\n/)) {
-    const head = line.match(/^(\S[^(]*)\(\d+,\d+\): /);
-    if (head) skipping = inAudit(head[1]);
-    else if (!/^\s/.test(line)) skipping = false;
-    if (!skipping) kept.push(line);
-  }
-  const text = kept.join('\n');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'codedetective-tsc-'));
+  const projects = [];
+  const seen = new Set();
+  const addProject = (cfgPath) => {
+    const abs = path.resolve(root, cfgPath);
+    if (seen.has(abs) || inAudit(abs)) return;
+    seen.add(abs);
+    projects.push(abs);
+    const shown = tryJson(run(bin, ['--showConfig', '-p', abs]).stdout) || {};
+    for (const ref of shown.references || []) {
+      let refPath = path.resolve(path.dirname(abs), ref.path || '');
+      if (fs.existsSync(refPath) && fs.statSync(refPath).isDirectory()) refPath = path.join(refPath, 'tsconfig.json');
+      if (fs.existsSync(refPath)) addProject(refPath);
+    }
+  };
+  addProject(config);
+
+  const projectFile = (f) => f && !/[\\/]node_modules[\\/]/.test(f) && !/[\\/]lib\.[^\\/]*\.d\.ts$/.test(f) && !inAudit(f);
+  const checkedFiles = new Set();
+  const kept = new Set();
+  const perProject = [];
+  let timedOut = false;
+  projects.forEach((proj, i) => {
+    const listed = run(bin, ['--listFilesOnly', '-p', proj]).stdout.split(/\r?\n/).map((s) => s.trim()).filter(projectFile);
+    listed.forEach((f) => checkedFiles.add(path.resolve(f)));
+    perProject.push({ project: path.relative(root, proj), files: listed.length });
+    if (!listed.length) return; // a solution root with only references
+    const r = run(bin, ['--noEmit', '-p', proj, '--pretty', 'false', '--tsBuildInfoFile', path.join(tmp, `p${i}.tsbuildinfo`)]);
+    if (r.timedOut) timedOut = true;
+    // Drop diagnostics (and their indented continuation lines) for files under .audit/; dedupe across projects.
+    let skipping = false;
+    let current = [];
+    const flush = () => { if (current.length) kept.add(current.join('\n')); current = []; };
+    for (const line of (r.stdout + r.stderr).split(/\r?\n/)) {
+      const head = line.match(/^(\S[^(]*)\(\d+,\d+\): /);
+      if (head) { flush(); skipping = inAudit(head[1]); }
+      else if (!/^\s/.test(line)) { flush(); skipping = false; }
+      if (!skipping && line) current.push(line);
+    }
+    flush();
+  });
+  fs.rmSync(tmp, { recursive: true, force: true });
+  const text = [...kept].join('\n');
   const file = save('tsc.txt', text);
+  const filesChecked = checkedFiles.size;
+  if (!filesChecked) {
+    return record('tsc', 'checked no files', { file, reason: 'the configs include no project files; treat type checking as Unverified', projects: perProject });
+  }
   const errors = (text.match(/error TS\d+/g) || []).length;
-  record('tsc', r.timedOut ? 'timeout' : 'ran', { exit: r.code, file, counts: { errors } });
+  record('tsc', timedOut ? 'timeout' : 'ran', { file, counts: { errors, filesChecked, projects: projects.length }, projects: perProject });
 })();
 
 // 2. Linter (uses the project's own configuration)
@@ -132,7 +184,8 @@ function record(tool, status, extra = {}) {
     }
   }
   const topRules = Object.entries(rules).sort((a, b) => b[1] - a[1]).slice(0, 15);
-  record('eslint', 'ran', { exit: r.code, file, counts: { errors, warnings }, topRules });
+  const complexity = (rules['sonarjs/cognitive-complexity'] || 0) + (rules['complexity'] || 0);
+  record('eslint', 'ran', { exit: r.code, file, counts: { errors, warnings, complexity }, topRules });
 })();
 
 // 3. Dead code: unused files, exports, dependencies
@@ -219,6 +272,20 @@ function record(tool, status, extra = {}) {
   record('gitleaks', 'ran', { exit: r.code, file: path.relative(root, reportFile), counts: { findings: data.length }, byRule });
 })();
 
+// 6b. Secrets in a build output folder (only with --scan-dir), values redacted and never printed
+(() => {
+  if (!scanDir) return;
+  const target = path.resolve(root, scanDir);
+  if (!fs.existsSync(target)) return record('gitleaks (build output)', 'skipped', { reason: `${scanDir} does not exist; build it locally first` });
+  const bin = findBin('gitleaks');
+  if (!bin) return record('gitleaks (build output)', 'missing');
+  const reportFile = path.join(outDir, 'gitleaks-build-output.json');
+  const r = run(bin, ['detect', '--no-git', '--no-banner', '--redact', '--source', target, '--report-format', 'json', '--report-path', reportFile, '--exit-code', '0']);
+  const data = fs.existsSync(reportFile) ? tryJson(fs.readFileSync(reportFile, 'utf8')) : null;
+  if (!Array.isArray(data)) return record('gitleaks (build output)', 'error', { exit: r.code, reason: 'no JSON report produced' });
+  record('gitleaks (build output)', 'ran', { exit: r.code, file: path.relative(root, reportFile), counts: { findings: data.length } });
+})();
+
 // 7. Network tools (only with --network)
 (() => {
   if (!allowNetwork) {
@@ -226,18 +293,22 @@ function record(tool, status, extra = {}) {
     record('osv-scanner', 'skipped', { reason: 'needs network; rerun with --network if the user agrees' });
     return;
   }
-  if (exists('package-lock.json') || exists('npm-shrinkwrap.json')) {
-    const npm = findBin('npm');
-    if (!npm) record('npm audit', 'missing');
+  const lock = ['package-lock.json', 'npm-shrinkwrap.json', 'pnpm-lock.yaml', 'yarn.lock', 'bun.lock', 'bun.lockb'].find(exists);
+  const manager = !lock ? null : lock.startsWith('pnpm') ? 'pnpm' : lock.startsWith('yarn') ? 'yarn' : lock.startsWith('bun') ? 'bun' : 'npm';
+  if (!manager) {
+    record('npm audit', 'skipped', { reason: 'no JavaScript lockfile' });
+  } else if (manager === 'npm' || manager === 'pnpm') {
+    const bin = findBin(manager);
+    if (!bin) record(`${manager} audit`, 'missing');
     else {
-      const r = run(npm, ['audit', '--json']);
-      const file = save('npm-audit.json', r.stdout || r.stderr);
+      const r = run(bin, ['audit', '--json']);
+      const file = save(`${manager}-audit.json`, r.stdout || r.stderr);
       const data = tryJson(r.stdout);
       const v = data && data.metadata && data.metadata.vulnerabilities;
-      record('npm audit', data ? 'ran' : 'error', { exit: r.code, file, counts: v || null });
+      record(`${manager} audit`, data ? 'ran' : 'error', { exit: r.code, file, counts: v || null });
     }
   } else {
-    record('npm audit', 'skipped', { reason: 'no package-lock.json' });
+    record(`${manager} audit`, 'skipped', { reason: `${lock} found; osv-scanner reads it, so rely on osv-scanner for known vulnerabilities` });
   }
   const osv = findBin('osv-scanner');
   if (!osv) return record('osv-scanner', 'missing');
@@ -260,10 +331,16 @@ function record(tool, status, extra = {}) {
     ['ts-nocheck', /@ts-nocheck\b/],
     ['ts-expect-error', /@ts-expect-error\b/],
     ['eslint-disable', /eslint-disable(?:-next-line|-line)?\b/],
-    ['test-skip', /\b(?:it|test|describe|context)\.(?:skip|fixme|todo)\s*\(|\b(?:xit|xdescribe|xtest)\s*\(/],
-    ['test-only', /\b(?:it|test|describe|context)\.only\s*\(|\b(?:fit|fdescribe)\s*\(/],
+    ['test-skip', /\b(?:it|test|describe|context|suite)(?:\.\w+)*\.(?:skip|skipIf|runIf|fixme|todo)\s*\(|\b(?:xit|xdescribe|xtest)\s*\(/],
+    ['test-only', /\b(?:it|test|describe|context|suite)(?:\.\w+)*\.only\s*\(|\b(?:fit|fdescribe)\s*\(/],
     ['empty-catch', /catch\s*(?:\([^)]*\))?\s*\{\s*\}/],
-    ['tls-disabled', /rejectUnauthorized\s*:\s*false|NODE_TLS_REJECT_UNAUTHORIZED/],
+    ['tls-disabled', /rejectUnauthorized\s*:\s*false|NODE_TLS_REJECT_UNAUTHORIZED|verify\s*=\s*False|InsecureSkipVerify\s*:\s*true/],
+    ['py-noqa', /#\s*noqa\b/],
+    ['py-type-ignore', /#\s*type:\s*ignore\b/],
+    ['py-test-skip', /@pytest\.mark\.(?:skip|skipif|xfail)\b|\bpytest\.skip\s*\(|@unittest\.skip/],
+    ['go-nolint', /\/\/\s*nolint\b/],
+    ['go-test-skip', /\bt\.Skip(?:Now|f)?\s*\(/],
+    ['rust-ignore-or-allow', /#\[ignore\]|#!?\[allow\(/],
   ];
   const hits = [];
   const counts = Object.fromEntries(patterns.map(([k]) => [k, 0]));
@@ -298,7 +375,9 @@ function record(tool, status, extra = {}) {
   }
   walk(root);
   const file = save('suppressions.json', JSON.stringify(hits, null, 2));
-  record('suppression scan', 'ran', { file, filesScanned: scanned, counts });
+  if (!scanned) return record('suppression scan', 'not applicable', { reason: 'no source files in a supported language; this is not a clean result' });
+  for (const k of Object.keys(counts)) if (!counts[k]) delete counts[k];
+  record('suppression scan', 'ran', { file, filesScanned: scanned, counts: { total: hits.length, ...counts } });
 })();
 
 // Summary
@@ -309,6 +388,27 @@ const lines = ['# Evidence Summary', '', `Generated: ${summary.generatedAt}`, `N
 for (const r of results) {
   const counts = r.counts ? Object.entries(r.counts).map(([k, v]) => `${k}: ${v}`).join(', ') : (r.reason || '');
   lines.push(`| ${r.tool} | ${r.status}${r.exit != null ? ` (exit ${r.exit})` : ''} | ${counts} | ${r.file || ''} |`);
+}
+if (compareDir) {
+  const before = tryJson((() => { try { return fs.readFileSync(path.resolve(root, compareDir, 'summary.json'), 'utf8'); } catch { return ''; } })());
+  if (!before) {
+    lines.push('', `Compare: no summary.json in ${compareDir}`);
+  } else {
+    lines.push('', `## Change since ${compareDir}`, '', '| Tool | Count | Before | After | Change |', '|---|---|---|---|---|');
+    let changed = 0;
+    const prior = Object.fromEntries((before.results || []).map((r) => [r.tool, r]));
+    for (const r of results) {
+      const old = prior[r.tool];
+      if (!old || !old.counts || !r.counts) continue;
+      for (const [k, v] of Object.entries(r.counts)) {
+        const was = old.counts[k];
+        if (typeof v !== 'number' || typeof was !== 'number' || v === was) continue;
+        lines.push(`| ${r.tool} | ${k} | ${was} | ${v} | ${v > was ? '+' : ''}${v - was} |`);
+        changed++;
+      }
+    }
+    if (!changed) lines.push('| (none) | No count changed | | | |');
+  }
 }
 const missing = results.filter((r) => r.status === 'missing').map((r) => r.tool);
 if (missing.length) {

@@ -14,6 +14,6 @@ Written against React 19 (with React Compiler 1.0 available) and current Vite, l
 
 ## Vite
 
-- **Client environment.** Only variables prefixed `VITE_` reach the client bundle, so any secret with that prefix is a P0 leak. Also scan a locally built `dist/` for secret patterns, not just the source, and report location and type only.
+- **Client environment.** Only variables prefixed `VITE_` reach the client bundle, so any secret with that prefix is a P0 leak. Also secret-scan a locally built `dist/` with the evidence script's `--scan-dir`, not just the source, and report location and type only, never with a plain text search that prints matches.
 - **Source maps.** Production source maps are not publicly served unless intended. If uploaded to an error tracker, they are removed from the deployed output afterward.
 - **Code splitting.** Heavy routes and features load through `React.lazy` or dynamic import. Judge bundle composition from a local build plus a visualizer, not by guessing.
