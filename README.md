@@ -115,6 +115,7 @@ Every audit is a separate run in its own dated folder under `.audit/runs/`, so a
 - **Comparing.** A new audit compares itself with the previous one by checklist ID: what was fixed, what is still open, what is new, and anything that came back after being fixed. Regressions are flagged and ranked first within their priority. Nothing is copied over: every finding is re-verified against today's code.
 - **Fixing.** `fix`, `plan` and `status` work on the current audit's queue, even across several days.
 - **Older files.** If `.audit/` holds files from before runs existed, they are moved into a `legacy` run folder automatically before anything else happens.
+- **Older report formats.** If a run's report was started by an earlier version of the skill, it's upgraded once, in place, when you next resume it: missing sections like the verdict and the coverage table are added from what the report already recorded, without redoing finished passes. Anything the old report never recorded is marked unverified rather than guessed, and it offers to re-run just that pass.
 - **Shared across audits.** `context.md` and `false-positives.md` stay at the top of `.audit/`, because they describe the project rather than one audit.
 
 ## What to do at the Pass 1 stop

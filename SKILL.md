@@ -60,6 +60,13 @@ The **current run** is the one named in `.audit/current-run`; if that file is mi
 
 `plan`, `fix` and `status` always work on the current run, including a run still mid-audit (for example a P0 found in Pass 1). Fixing a run's queue can take days; starting a new run makes the new one current, and the old queue stays in history.
 
+**Runs in an older report format.** Before resuming, fixing, planning or reporting status on a run, compare its report with the current structure in `references/report-template.md`. If it is missing sections (for example the verdict line, Decisions Needed, Since Last Audit or Checklist Coverage), add them once, in place, before doing anything else. Do not redo finished passes to do it:
+- Fill Checklist Coverage from what the report already records: findings and tasks become Finding, recorded safeguards become Passed, recorded not-applicable items become Not Applicable. Any gated item in a finished pass that the old report never recorded an outcome for becomes Unverified ("not recorded in this run's format"); never guess an outcome. Items in passes not yet run stay empty.
+- Create `.audit/accepted.md` if it does not exist, and move into it any decisions or won't-fix choices the developer already made in the old report, with their reasons.
+- Add any missing task fields (`CHECK_ID`, `PLAN`, `VERIFIER`) from what the task already says, leaving a field as "not recorded" rather than inventing it.
+- Compute the verdict from the result, and record in the Progress section that the report was upgraded, on what date, and how many items were marked Unverified because the old format never recorded them.
+Say in one line that the report was upgraded. If the upgrade leaves items Unverified that matter, offer to re-run just the pass that covers them.
+
 **Stale unfinished runs.** Before resuming, check whether the unfinished run has gone stale: it started more than 3 days ago, or tracked source files have changed since its recorded commit. If so, ask (multiple choice when available) whether to resume it or start a new run, and say what changed. Do not guess.
 
 **Never strand a queue.** A new audit makes the new run current, and the old run's open tasks and approved plans become history. Only start one over open tasks when the user chooses it (`new`, or that option in the question).
