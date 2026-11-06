@@ -69,10 +69,12 @@ Approved plans are saved in the current run's `plans/` folder after plan mode, b
 
 ## Report structure
 
-Write `code-health-report.md` in the current run's folder (`.audit/runs/<run-id>/`) with exactly these sections. Append each pass as you finish it, and keep sections 7 and 8 current as findings accumulate.
+Write `code-health-report.md` in the current run's folder (`.audit/runs/<run-id>/`) with exactly these sections. Append each pass as you finish it, and keep the verdict and sections 7 to 9 current as findings accumulate.
 
 ```markdown
 # <Project Name>: Code Health & Self-Remediation Plan
+
+**Verdict:** <Clean | Clean with gaps | Issues found>: <one line with the evidence, e.g. "41 of 48 gated items passed, 7 not applicable, at commit abc123 on 2026-11-06", or open task counts by priority, or "All findings fixed through commit def456; run /codedetective new to confirm Clean">
 
 ## 0. Progress
 - Run: <run-id>, started <date and time> against commit <short hash>
@@ -109,8 +111,8 @@ For each:
 ## 4. Decisions Needed
 Questions only the developer can answer, where the right fix depends on a business choice. For each: the checklist ID, what was found, the choice to make, and the options with their trade-offs. Once answered, a decision may become a task.
 
-## 5. Advisory Maintainability Notes
-Judgment findings from Pass 4. For each: the location, the issue, the concrete simpler alternative, and its rough diff size. These never become P0 or P1 tasks; the developer may promote any of them into the queue as P2.
+## 5. Advisory and Optional Notes
+Judgment findings from Pass 4, and P2 findings marked Optional under the diminishing-returns rule (no correctness, security or performance effect, in rarely changed code). For each: the checklist ID, location, the issue, the concrete simpler alternative, its rough diff size, and whether it is Advisory or Optional. None of these count against the verdict; the developer may promote any into the queue as P2.
 
 ## 6. Since Last Audit
 Only when there is a previous run. Match findings by checklist ID and location, after every finding in this run has been verified on its own. List:
@@ -125,6 +127,17 @@ Up to five highest-impact Confirmed risks. If fewer than five meet the bar, list
 
 ## 8. Ordered Remediation Queue
 Tasks in the schema below.
+
+## 9. Checklist Coverage
+One line per gated checklist item (every item except `QUAL-11` to `QUAL-16`), plus any `PROJ-NN` findings, so the verdict can be checked. The rows below are format examples only:
+
+| ID | Outcome | Where or why |
+|---|---|---|
+| SEC-01 | Passed | Verified Safeguard: session cookies HttpOnly, Secure, SameSite=Lax in server/auth.js |
+| SEC-20 | Not Applicable | No LLM features |
+| SEC-03 | Finding | P0-01 |
+
+Outcomes: Passed (a Verified Safeguard or nothing found), Not Applicable, Finding (with task or section reference), Unverified (with the blocker), Decision Needed. The verdict counts come from this table.
 ```
 
 ---

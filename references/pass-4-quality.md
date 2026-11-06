@@ -41,4 +41,4 @@ Look specifically for these, because they accumulate quickly when code is genera
 
 ## Prioritization
 
-Maintainability findings are usually P2. Order them by how often the code is changed or read (hot files first), not by how ugly they are, because cleaning code nobody touches rarely pays back.
+Maintainability findings are usually P2. Order them by how often the code is changed or read (hot files first), not by how ugly they are, because cleaning code nobody touches rarely pays back. A finding with no correctness, security or performance effect in code touched by few or no commits in the past six months is Optional (see Diminishing returns in SKILL.md): listed, not queued, and never counted against the verdict.
