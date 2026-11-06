@@ -25,6 +25,7 @@ The developer can drop this at `.audit/context.md` to sharpen the investigation.
 - Known concerns or recent incidents:
 - Production services that must never be touched:
 - Areas out of scope:
+- Network tools allowed (public vulnerability databases): <yes | no>
 ```
 
 ---

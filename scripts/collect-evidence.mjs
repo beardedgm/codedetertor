@@ -1,15 +1,21 @@
 #!/usr/bin/env node
 // codedetective evidence collector.
 // Runs only analyzers already installed in the project (node_modules/.bin) or on PATH.
-// Never installs, never fixes, never writes outside .audit/evidence/, never prints raw tool output.
+// Never installs, never fixes, never writes outside the --out folder, never prints raw tool output.
+// Saved output never holds source code: ESLint sources and fixes and jscpd fragments are stripped, and
+// long token-like string literals in diagnostics are redacted, so reading the evidence cannot print a secret.
 // Usage (from the repository root):
-//   node <skill-dir>/scripts/collect-evidence.mjs [--out <dir>] [--compare <dir>] [--scan-dir <dir>] [--network]
-//   --out <dir>       where to write results (default .audit/evidence); must be inside .audit/
+//   node <skill-dir>/scripts/collect-evidence.mjs --out <dir> [--compare <dir>] [--scan-dir <dir>] [--network]
+//   --out <dir>       required: where to write results, inside .audit/ (normally .audit/runs/<run-id>/evidence)
 //   --compare <dir>   an earlier output folder; adds a before/after table of the key counts
-//   --scan-dir <dir>  also secret-scan a build output folder (e.g. dist) with gitleaks, values redacted
+//   --scan-dir <dir>  also secret-scan a build output folder with gitleaks, values redacted
 //   --network         also run tools that query public vulnerability databases (npm audit, pnpm audit, osv-scanner)
 // Everything under .audit/ (earlier audits, scratch scripts, harnesses) is excluded from every tool,
-// and filtered out of their results as well, so audit artifacts never count as findings.
+// and filtered out of their results as well, so audit artifacts never count as findings. Files git ignores
+// (virtual environments, build folders, installed packages) are not scanned either.
+//
+// Statuses: "ran" is a complete check. "partial" ran but could not check everything; what it found is real,
+// but a zero proves nothing for the part it skipped. Every other status means the check did not happen.
 
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -17,23 +23,32 @@ import os from 'node:os';
 import path from 'node:path';
 
 const root = process.cwd();
-const outArg = process.argv.indexOf('--out');
-const outDir = path.resolve(root, outArg !== -1 && process.argv[outArg + 1] ? process.argv[outArg + 1] : path.join('.audit', 'evidence'));
-const auditRoot = path.join(root, '.audit');
-if (outDir !== auditRoot && !outDir.startsWith(auditRoot + path.sep)) {
-  process.stderr.write('--out must point inside .audit/\n');
-  process.exit(2);
-}
-const allowNetwork = process.argv.includes('--network');
 const argValue = (flag) => {
   const i = process.argv.indexOf(flag);
   return i !== -1 && process.argv[i + 1] ? process.argv[i + 1] : null;
 };
+const outArg = argValue('--out');
+if (!outArg) {
+  // No default: an implicit folder would land outside the run and later be mistaken for a legacy audit.
+  process.stderr.write('--out is required, for example --out .audit/runs/<run-id>/evidence\n');
+  process.exit(2);
+}
+const outDir = path.resolve(root, outArg);
+const auditRoot = path.join(root, '.audit');
+if (outDir === auditRoot || !outDir.startsWith(auditRoot + path.sep)) {
+  process.stderr.write('--out must point to a folder inside .audit/\n');
+  process.exit(2);
+}
+const allowNetwork = process.argv.includes('--network');
 const compareDir = argValue('--compare');
 const scanDir = argValue('--scan-dir');
 const isWin = process.platform === 'win32';
 const TIMEOUT_MS = 10 * 60 * 1000;
-const SKIP_DIRS = new Set(['node_modules', '.git', '.audit', 'dist', 'build', 'coverage', '.next', '.turbo', '.cache', 'out', 'vendor', 'playwright-report', 'test-results']);
+const SKIP_DIRS = new Set([
+  'node_modules', '.git', '.audit', 'dist', 'build', 'coverage', '.next', '.turbo', '.cache', 'out', 'vendor', 'playwright-report', 'test-results',
+  // Installed packages and build output of other ecosystems, for folders that are not git repositories.
+  '.venv', 'venv', '__pycache__', 'site-packages', '.tox', '.nox', '.mypy_cache', '.pytest_cache', '.ruff_cache', 'target', '.gradle', 'Pods',
+]);
 const CODE_EXT = new Set([
   '.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.mts', '.cts', '.vue', '.svelte',
   '.py', '.go', '.rs', '.rb', '.java', '.kt', '.cs', '.php', '.swift',
@@ -92,6 +107,13 @@ function tryJson(text) {
   try { return JSON.parse(text); } catch { return null; }
 }
 
+// Diagnostics can quote a string literal from the code (a TypeScript literal type, a lint message).
+// Redact quoted values that look like tokens or keys: 20+ characters, no spaces, letters and digits mixed.
+// Module paths and ordinary words are left alone so the message stays useful.
+const QUOTED = /(["'`])([^"'`\s]{20,})\1/g;
+const tokenLike = (s) => /\d/.test(s) && /[A-Za-z]/.test(s) && !/^[./@~]/.test(s) && !/\.(?:[cm]?[jt]sx?|json|d\.ts)$/.test(s);
+const redact = (text) => String(text).replace(QUOTED, (m, q, s) => (tokenLike(s) ? `${q}[redacted ${s.length} chars]${q}` : m));
+
 const results = [];
 function record(tool, status, extra = {}) {
   results.push({ tool, status, ...extra });
@@ -148,14 +170,25 @@ function record(tool, status, extra = {}) {
     flush();
   });
   fs.rmSync(tmp, { recursive: true, force: true });
-  const text = [...kept].join('\n');
+  const text = redact([...kept].join('\n'));
   const file = save('tsc.txt', text);
   const filesChecked = checkedFiles.size;
   if (!filesChecked) {
     return record('tsc', 'checked no files', { file, reason: 'the configs include no project files; treat type checking as Unverified', projects: perProject });
   }
-  const errors = (text.match(/error TS\d+/g) || []).length;
-  record('tsc', timedOut ? 'timeout' : 'ran', { file, counts: { errors, filesChecked, projects: projects.length }, projects: perProject });
+  // TS6305: a referenced composite project has no built output yet. Checking without building is how this
+  // script stays read-only, so this is a gap in the check, not a type error in the code.
+  const unbuiltReferences = (text.match(/error TS6305\b/g) || []).length;
+  const errors = (text.match(/error TS\d+/g) || []).length - unbuiltReferences;
+  const counts = { errors, filesChecked, projects: projects.length };
+  if (unbuiltReferences) {
+    counts.unbuiltReferences = unbuiltReferences;
+    return record('tsc', timedOut ? 'timeout' : 'partial', {
+      file, counts, projects: perProject,
+      reason: 'referenced projects are not built (TS6305), so imports across project references were not type-checked; those errors are real, but a zero proves nothing for cross-project types',
+    });
+  }
+  record('tsc', timedOut ? 'timeout' : 'ran', { file, counts, projects: perProject });
 })();
 
 // 2. Linter (uses the project's own configuration)
@@ -168,10 +201,22 @@ function record(tool, status, extra = {}) {
   const r = run(bin, ['.', '--format', 'json', '--no-error-on-unmatched-pattern', '--ignore-pattern', '.audit/**']);
   const raw = tryJson(r.stdout);
   if (!Array.isArray(raw)) {
-    const file = save('eslint.json', r.stdout || r.stderr);
+    // stdout may be partial JSON carrying file sources, so only the error stream is kept.
+    const file = save('eslint-error.txt', redact(r.stderr || '(no error output)'));
     return record('eslint', 'error', { exit: r.code, file, reason: 'output was not JSON; see file' });
   }
-  const data = raw.filter((f) => !inAudit(f.filePath));
+  // ESLint's JSON carries each flagged file's full text (source, output) and fix text: strip them all,
+  // keeping only where each problem is and what it is.
+  const data = raw.filter((f) => !inAudit(f.filePath)).map((f) => ({
+    filePath: f.filePath,
+    errorCount: f.errorCount,
+    warningCount: f.warningCount,
+    fatalErrorCount: f.fatalErrorCount,
+    messages: (f.messages || []).map((m) => ({
+      ruleId: m.ruleId, severity: m.severity, message: redact(m.message || ''),
+      line: m.line, column: m.column, endLine: m.endLine, endColumn: m.endColumn, fatal: m.fatal,
+    })),
+  }));
   const file = save('eslint.json', JSON.stringify(data));
   const rules = {};
   let errors = 0, warnings = 0;
@@ -236,8 +281,10 @@ function record(tool, status, extra = {}) {
     '--min-tokens', '50',
     '--reporters', 'json',
     '--output', reportDir,
+    '--gitignore',
     '--ignore', [
       '**/node_modules/**', '**/dist/**', '**/build/**', '**/.audit/**', '**/coverage/**', '**/*.min.js', '**/package-lock.json',
+      '**/.venv/**', '**/venv/**', '**/site-packages/**', '**/__pycache__/**', '**/target/**', '**/vendor/**',
       // Repeated setup in tests and fixtures is normal; QUAL-02 counts production duplication only.
       '**/__tests__/**', '**/__mocks__/**', '**/__fixtures__/**', '**/fixtures/**', '**/*.test.*', '**/*.spec.*', '**/test_*.py', '**/*_test.go',
     ].join(','),
@@ -247,9 +294,17 @@ function record(tool, status, extra = {}) {
   const reportFile = path.join(reportDir, 'jscpd-report.json');
   const data = fs.existsSync(reportFile) ? tryJson(fs.readFileSync(reportFile, 'utf8')) : null;
   if (!data) {
-    const file = save('jscpd.txt', r.stdout + r.stderr);
+    // Never keep a report that could not be parsed: it may hold copied code.
+    fs.rmSync(reportDir, { recursive: true, force: true });
+    const file = save('jscpd-error.txt', redact(r.stderr || '(no error output)'));
     return record('jscpd', 'error', { exit: r.code, file, reason: 'no JSON report produced; see file' });
   }
+  // The report copies each duplicated block of code (fragment) and may include blame data: keep locations only.
+  for (const d of data.duplicates || []) {
+    delete d.fragment;
+    for (const side of [d.firstFile, d.secondFile]) if (side) delete side.blame;
+  }
+  fs.writeFileSync(reportFile, JSON.stringify(data));
   const total = (data.statistics && data.statistics.total) || {};
   record('jscpd', 'ran', {
     exit: r.code,
@@ -293,8 +348,9 @@ function record(tool, status, extra = {}) {
 // 7. Network tools (only with --network)
 (() => {
   if (!allowNetwork) {
-    record('npm audit', 'skipped', { reason: 'needs network; rerun with --network if the user agrees' });
-    record('osv-scanner', 'skipped', { reason: 'needs network; rerun with --network if the user agrees' });
+    const reason = 'needs network and the user has not agreed; known vulnerabilities (SEC-19) stay Unverified until this runs';
+    record('npm audit', 'skipped', { reason });
+    record('osv-scanner', 'skipped', { reason });
     return;
   }
   const lock = ['package-lock.json', 'npm-shrinkwrap.json', 'pnpm-lock.yaml', 'yarn.lock', 'bun.lock', 'bun.lockb'].find(exists);
@@ -349,35 +405,45 @@ function record(tool, status, extra = {}) {
   const hits = [];
   const counts = Object.fromEntries(patterns.map(([k]) => [k, 0]));
   let scanned = 0;
+  function scanFile(full) {
+    if (!CODE_EXT.has(path.extname(full))) return;
+    let text;
+    try {
+      const st = fs.lstatSync(full);
+      if (!st.isFile() || st.size > 2 * 1024 * 1024) return;
+      text = fs.readFileSync(full, 'utf8');
+    } catch { return; }
+    scanned++;
+    text.split(/\r?\n/).forEach((line, i) => {
+      for (const [kind, re] of patterns) {
+        if (re.test(line)) {
+          counts[kind]++;
+          hits.push({ file: path.relative(root, full), line: i + 1, kind });
+        }
+      }
+    });
+  }
   function walk(dir) {
     let entries;
     try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
     for (const e of entries) {
       if (e.isSymbolicLink()) continue;
       const full = path.join(dir, e.name);
-      if (e.isDirectory()) {
-        if (!SKIP_DIRS.has(e.name)) walk(full);
-        continue;
-      }
-      if (!CODE_EXT.has(path.extname(e.name))) continue;
-      let text;
-      try {
-        if (fs.statSync(full).size > 2 * 1024 * 1024) continue;
-        text = fs.readFileSync(full, 'utf8');
-      } catch { continue; }
-      scanned++;
-      const lines = text.split(/\r?\n/);
-      lines.forEach((line, i) => {
-        for (const [kind, re] of patterns) {
-          if (re.test(line)) {
-            counts[kind]++;
-            hits.push({ file: path.relative(root, full), line: i + 1, kind });
-          }
-        }
-      });
+      if (e.isDirectory()) { if (!SKIP_DIRS.has(e.name)) walk(full); }
+      else scanFile(full);
     }
   }
-  walk(root);
+  // In a git repository, scan exactly the files git would track (committed or new, never ignored), so
+  // virtual environments and installed packages are left out whatever they are called. Otherwise, walk.
+  const listed = spawnSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { cwd: root, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
+  if (listed.status === 0) {
+    const skipped = (rel) => rel.split('/').some((seg) => SKIP_DIRS.has(seg));
+    for (const rel of new Set(listed.stdout.split('\0').filter(Boolean))) {
+      if (!skipped(rel) && !inAudit(rel)) scanFile(path.join(root, rel));
+    }
+  } else {
+    walk(root);
+  }
   const file = save('suppressions.json', JSON.stringify(hits, null, 2));
   if (!scanned) return record('suppression scan', 'not applicable', { reason: 'no source files in a supported language; this is not a clean result' });
   for (const k of Object.keys(counts)) if (!counts[k]) delete counts[k];
@@ -417,6 +483,14 @@ if (compareDir) {
 const missing = results.filter((r) => r.status === 'missing').map((r) => r.tool);
 if (missing.length) {
   lines.push('', `Not installed (recommend to the user; never install during reconnaissance): ${missing.join(', ')}`);
+}
+const partial = results.filter((r) => r.status === 'partial').map((r) => r.tool);
+if (partial.length) {
+  lines.push('', `Partial (findings are real, but a zero proves nothing for what was skipped): ${partial.join(', ')}`);
+}
+const notRun = results.filter((r) => r.status !== 'ran' && r.status !== 'partial').map((r) => `${r.tool} (${r.status})`);
+if (notRun.length) {
+  lines.push('', `Did not happen (items that rely on these stay Unverified, never Passed): ${notRun.join(', ')}`);
 }
 const md = lines.join('\n') + '\n';
 save('summary.md', md);

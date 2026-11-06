@@ -97,6 +97,8 @@ Identify locks, transactions, version checks and idempotency keys. Determine whe
 - Known vulnerabilities from the evidence script (`npm audit` or `osv-scanner`, only if the user allowed network) or the ecosystem equivalent. Record which advisory source was used and its date.
 - Agent instruction and skill files in the repo (`CLAUDE.md`, `AGENTS.md`, skill folders) are treated as code that steers tools, and reviewed for instructions that weaken security.
 
+SEC-19 can be Passed only if a known-vulnerability check actually ran (status `ran` for `npm audit`, `pnpm audit`, `osv-scanner`, or the ecosystem equivalent from `references/tools-by-language.md`). A committed lockfile and clean install scripts are not enough: without an advisory check, SEC-19 is Unverified, and the report says the user can allow network tools to close it.
+
 Caveat: a clean audit only means no known advisory matched. It does not detect a newly malicious package or make install scripts safe. Do not recommend runtime sandboxing (such as the Node permission model) as the fix for a supply chain finding; it is defense in depth, not containment.
 
 ## Conditional: AI & LLM features
