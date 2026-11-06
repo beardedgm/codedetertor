@@ -15,7 +15,7 @@ The goal is what an experienced lead developer would call good clean code: secur
 - [What to do at the Pass 1 stop](#what-to-do-at-the-pass-1-stop)
 - [Audit history](#audit-history)
 - [How findings are judged](#how-findings-are-judged)
-- [The verdict: can a codebase come back clean?](#the-verdict-can-a-codebase-come-back-clean)
+- [The verdict: reaching the standard](#the-verdict-reaching-the-standard)
 - [When the report is finished](#when-the-report-is-finished)
 - [How planning works](#how-planning-works)
 - [How fixes work](#how-fixes-work)
@@ -152,30 +152,31 @@ Tasks are prioritized by real consequence:
 - **P1 High:** a measured slowdown, a confirmed race condition, or substantial usability damage.
 - **P2 Hygiene:** types, contracts, duplication, dead code, modernization, and preventive work.
 
-## The verdict: can a codebase come back clean?
+## The verdict: reaching the standard
 
-Yes. The checklists are a finite set of industry standards (OWASP Top 10:2025, ASVS 5.0 and current stack best practice), and a codebase can fully meet them. Finding nothing is treated as a successful audit, not a failure to look hard enough: the skill is told never to lower its evidence bar or hunt for marginal issues to avoid an empty report.
+The goal is to fix the codebase until it meets a fixed standard, then stop. The checklists are a finite set of industry standards and best practices (OWASP Top 10:2025, ASVS 5.0, and current practice for your stack). They are about how the code is built, never about what you build, and a codebase can fully meet them. Each audit and fix round should leave fewer findings, until nothing is left that would add stability, security, correctness, performance or maintainability.
+
+Once the real work is done, the skill should say so instead of inventing work. Every finding has to name the checklist item it fails and the concrete benefit of fixing it, and a change that only rewords, reshuffles or restyles code doesn't qualify. A run that finds nothing is treated as a successful audit, and the skill is told never to lower its evidence bar or hunt for marginal issues to avoid an empty report.
 
 Every report opens with a verdict:
 
 | Verdict | Meaning |
 |---|---|
-| **Clean** | Every applicable checklist item passed or doesn't apply, nothing went unchecked, no decisions are waiting on you, and nothing is left to fix. |
-| **Clean with gaps** | Nothing left to fix, but some items couldn't be checked or a decision is waiting on you. It lists exactly what stands between this and Clean. |
-| **Issues found** | Fixes remain, counted by priority. It also tells you when no P0 or P1 tasks remain, which is the first milestone. |
+| **Standard met** | Every applicable checklist item passed or doesn't apply, nothing went unchecked, no decisions are waiting on you, and nothing is left to fix. |
+| **Standard met, with gaps** | Nothing left to fix, but some items couldn't be checked or a decision is waiting on you. It lists exactly what stands between this and Standard met. |
+| **Fixes remaining** | Fixes remain, counted by priority. It also tells you when no P0 or P1 tasks remain, which is the first milestone. |
 
-The verdict carries its evidence, for example: *"Clean against the codedetective checklist: 41 of 48 gated items passed, 7 not applicable, at commit abc123 on 2026-11-06."* A Checklist Coverage table at the end of the report shows the outcome of every item, so you can check the claim.
+The verdict carries its evidence, for example: *"Standard met: 41 of 48 gated items passed, 7 not applicable, at commit abc123 on 2026-11-06."* A Checklist Coverage table at the end of the report shows the outcome of every item, so you can check the claim.
 
-A few rules keep the verdict honest and reachable:
-
-- **Opinions never block Clean.** Pass 4's judgment calls (design fit, naming, simplicity) are advisory only.
-- **Polish nobody needs never blocks Clean.** Low-impact cleanup in code that has barely changed in six months is marked Optional: listed, not queued, and you can promote it if you want it.
-- **Only an audit can earn Clean.** When you fix the last task, the verdict says all findings are fixed and offers `/codedetective new` to confirm, because the fixes changed code the audit never saw.
-- **Clean has a date.** It applies to the audited commit. New code, a newly published vulnerability in a package you use, or a new edition of a standard can change it, which is what the next audit is for.
+- **Everything that fails the standard gets fixed.** Low-impact findings are fixed at low priority, not skipped.
+- **Opinions never block the verdict.** Pass 4's judgment calls (design fit, naming, simplicity) are advisory only, so "could be written differently" never keeps you from the finish line.
+- **Only an audit can confirm it.** When you fix the last task, the verdict says all findings are fixed and offers `/codedetective new` to confirm, because the fixes changed code the audit never saw.
+- **The verdict has a date.** It applies to the audited commit. New code, a newly published vulnerability in a package you use, or a new edition of a standard can change it, which is what the next audit is for.
+- **It is not a proof of zero bugs.** No tool or reviewer can prove that. It shows every item in the standard was checked and passed.
 
 ## When the report is finished
 
-After Pass 4, it leads with the verdict. If the verdict is Clean, it says so and stops; there is nothing to fix. Otherwise it asks what you want next:
+After Pass 4, it leads with the verdict. If the verdict is Standard met, it says so and stops; there is nothing to fix. Otherwise it asks what you want next:
 
 1. **Fix the next task.** It plans the top task, you approve, and it builds that one fix.
 2. **Plan a batch.** It plans all the P0 tasks (or another tier you name) together. It recommends this when there are several urgent tasks, because seeing them side by side catches fixes that touch the same code.

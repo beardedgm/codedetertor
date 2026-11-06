@@ -74,7 +74,7 @@ Write `code-health-report.md` in the current run's folder (`.audit/runs/<run-id>
 ```markdown
 # <Project Name>: Code Health & Self-Remediation Plan
 
-**Verdict:** <Clean | Clean with gaps | Issues found>: <one line with the evidence, e.g. "41 of 48 gated items passed, 7 not applicable, at commit abc123 on 2026-11-06", or open task counts by priority, or "All findings fixed through commit def456; run /codedetective new to confirm Clean">
+**Verdict:** <Standard met | Standard met, with gaps | Fixes remaining>: <one line with the evidence, e.g. "41 of 48 gated items passed, 7 not applicable, at commit abc123 on 2026-11-06", or open task counts by priority, or "All findings fixed through commit def456; run /codedetective new to confirm the standard is met">
 
 ## 0. Progress
 - Run: <run-id>, started <date and time> against commit <short hash>
@@ -111,8 +111,8 @@ For each:
 ## 4. Decisions Needed
 Questions only the developer can answer, where the right fix depends on a business choice. For each: the checklist ID, what was found, the choice to make, and the options with their trade-offs. Once answered, a decision may become a task.
 
-## 5. Advisory and Optional Notes
-Judgment findings from Pass 4, and P2 findings marked Optional under the diminishing-returns rule (no correctness, security or performance effect, in rarely changed code). For each: the checklist ID, location, the issue, the concrete simpler alternative, its rough diff size, and whether it is Advisory or Optional. None of these count against the verdict; the developer may promote any into the queue as P2.
+## 5. Advisory Notes
+Judgment findings from Pass 4. For each: the checklist ID, location, the issue, the concrete simpler alternative, and its rough diff size. These never count against the verdict; the developer may promote any into the queue as P2.
 
 ## 6. Since Last Audit
 Only when there is a previous run. Match findings by checklist ID and location, after every finding in this run has been verified on its own. List:

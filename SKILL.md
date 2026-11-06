@@ -107,21 +107,21 @@ Also record **Verified Safeguards** (existing defenses that work, so the develop
 
 Only Confirmed issues, or preventive hardening you explicitly justify, may enter the remediation queue.
 
-**Finding nothing is a valid result.** The checklists are a finite set of standards a codebase can fully meet. An item that checks out is a Verified Safeguard, not a near miss to dress up as a finding, and a run that confirms nothing is a successful audit. Never lower the evidence bar, hunt for marginal issues, or promote advisory notes to avoid an empty queue.
+**The goal is the standard, then stop.** The checklists are a finite set of industry standards and best practices about how code is built, never about what it does or which features it has, and a codebase can fully meet them. Fix everything that fails them, at whatever priority its impact warrants. Once the standard is met, there is nothing left to do, and saying so is the correct result.
 
-**Diminishing returns.** A P2 maintainability finding with no correctness, security or performance effect, in code touched by few or no commits in the past six months (check `git log`), is **Optional**: list it under Advisory and Optional Notes, do not queue it, and do not let it count against the verdict. The user can promote any Optional item into the queue. Cleaning code nobody touches rarely pays back.
+**Every finding must earn its place.** It names the checklist item it fails and the concrete benefit of fixing it: stability, security, correctness, performance, or maintainability. A change that only rewords, reshuffles or restyles code without one of those benefits is not a finding. An item that checks out is a Verified Safeguard, not a near miss to dress up as a finding, and a run that confirms nothing is a successful audit. Never lower the evidence bar, hunt for marginal issues, or promote advisory notes to avoid an empty queue; going in circles to look busy costs the developer time and adds nothing.
 
 ## Verdict
 
-Every report opens with a verdict, so a clean result is stated plainly instead of implied by an empty section. Gated items are every checklist item except the Pass 4 judgment criteria (`QUAL-11` to `QUAL-16`), plus any `PROJ-NN` findings; each ends as Passed (a Verified Safeguard or nothing found), Not Applicable, Finding, Unverified, or Decision Needed, recorded in the Checklist Coverage section.
+Every report opens with a verdict, so reaching the standard is stated plainly instead of implied by an empty section. Gated items are every checklist item except the Pass 4 judgment criteria (`QUAL-11` to `QUAL-16`), plus any `PROJ-NN` findings; each ends as Passed (a Verified Safeguard or nothing found), Not Applicable, Finding, Unverified, or Decision Needed, recorded in the Checklist Coverage section.
 
-- **Clean:** every applicable gated item Passed or is Not Applicable, nothing is Unverified, no Decisions Needed are pending, and the queue has no open tasks. Advisory and Optional notes may remain.
-- **Clean with gaps:** the queue is empty, but some items are Unverified or Decisions Needed are pending. List them; they are what stands between this and Clean.
-- **Issues found:** open tasks remain. Give counts by priority, and say when no P0 or P1 tasks remain, because that is the first milestone.
+- **Standard met:** every applicable gated item Passed or is Not Applicable, nothing is Unverified, no Decisions Needed are pending, and the queue has no open tasks. Advisory notes may remain.
+- **Standard met, with gaps:** the queue is empty, but some items are Unverified or Decisions Needed are pending. List them; they are what stands between this and Standard met.
+- **Fixes remaining:** open tasks remain. Give counts by priority, and say when no P0 or P1 tasks remain, because that is the first milestone.
 
-Write it as one line with the evidence behind it, for example: "Clean against the codedetective checklist: 41 of 48 gated items passed, 7 not applicable, at commit abc123 on 2026-11-06." Recompute the verdict at the end of every pass and every fix.
+Write it as one line with the evidence behind it, for example: "Standard met: 41 of 48 gated items passed, 7 not applicable, at commit abc123 on 2026-11-06." Recompute the verdict at the end of every pass and every fix.
 
-Only an audit can earn **Clean**. When fixing empties the queue, the verdict becomes "All findings fixed through commit `<hash>`; run `/codedetective new` to confirm Clean", because fixes change code the audit never saw. A fresh run that confirms nothing is what earns the Clean verdict.
+Only an audit can confirm **Standard met**. When fixing empties the queue, the verdict becomes "All findings fixed through commit `<hash>`; run `/codedetective new` to confirm the standard is met", because fixes change code the audit never saw. A fresh run that confirms nothing is what earns the verdict.
 
 ## Reconnaissance phases
 
@@ -147,7 +147,7 @@ Write the report using the structure and task schema in `references/report-templ
 
 **Passes 2 to 4 run without stopping.** After Pass 1 is cleared, run Passes 2, 3 and 4 in one go, appending each to the report, unless the context runs low, in which case stop, say which pass is next, and ask whether to continue.
 
-**End of reconnaissance.** When Pass 4 is written, the run is complete. If there is a previous run, write the "Since last audit" comparison. Fill in Checklist Coverage and compute the verdict. Then give the summary, leading with the verdict. If the verdict is Clean, say so plainly, offer only to stop or to review the advisory notes, and do not search further. Otherwise offer three choices, using a multiple-choice question if the tool is available:
+**End of reconnaissance.** When Pass 4 is written, the run is complete. If there is a previous run, write the "Since last audit" comparison. Fill in Checklist Coverage and compute the verdict. Then give the summary, leading with the verdict. If the verdict is Standard met, say so plainly, offer only to stop or to review the advisory notes, and do not search further. Otherwise offer three choices, using a multiple-choice question if the tool is available:
 1. **Fix the next task:** plan the top eligible task, get approval, and build it.
 2. **Plan a batch:** plan all P0 tasks (or another tier or set the user names) together, for one approval. Recommend this when there are several P0 or P1 tasks, because seeing them together catches fixes that touch the same code.
 3. **Stop here:** leave the report for the user to read.
@@ -184,7 +184,7 @@ Plans are where the user reviews a fix before any code changes, so a plan must b
 8. Run the task's verification commands under the same isolation rules as reconnaissance.
 9. Run `node "${CLAUDE_SKILL_DIR}/scripts/check-diff.mjs"`. It fails if the diff adds test skips or focus markers, lint or type suppression comments, removes assertions, or deletes test files. A failure means the fix is rejected: revert that part and find a real fix, or stop and report the blocker.
 10. Rerun the evidence script with the same `--out` and record the before and after delta in the task (errors, suppressions, duplication, complexity). A fix that makes the numbers worse needs a stated reason.
-11. Mark the task done in the report with its verification results, recompute the verdict, then stop and ask the user to review before the next task. When this was the last open task, say so and offer `/codedetective new` to confirm Clean. End with a question, multiple choice when available: fix the next task, and, if the run's audit is unfinished, continue the audit at the next pass; plus stop. Name the next task and the next pass in the options.
+11. Mark the task done in the report with its verification results, recompute the verdict, then stop and ask the user to review before the next task. When this was the last open task, say so and offer `/codedetective new` to confirm the standard is met. End with a question, multiple choice when available: fix the next task, and, if the run's audit is unfinished, continue the audit at the next pass; plus stop. Name the next task and the next pass in the options.
 
 **Never weaken security or test integrity to make a check pass.** That includes hardcoding tokens or credentials, disabling TLS verification, commenting out or bypassing auth middleware, skipping or deleting tests, loosening assertions, adding suppression comments, bypassing git hooks, and catching and swallowing errors. These shortcuts convert a visible problem into an invisible one. If a task cannot pass without one of them, stop and report the blocker.
 
