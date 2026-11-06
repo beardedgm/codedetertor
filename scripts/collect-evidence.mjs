@@ -236,7 +236,11 @@ function record(tool, status, extra = {}) {
     '--min-tokens', '50',
     '--reporters', 'json',
     '--output', reportDir,
-    '--ignore', '**/node_modules/**,**/dist/**,**/build/**,**/.audit/**,**/coverage/**,**/*.min.js,**/package-lock.json',
+    '--ignore', [
+      '**/node_modules/**', '**/dist/**', '**/build/**', '**/.audit/**', '**/coverage/**', '**/*.min.js', '**/package-lock.json',
+      // Repeated setup in tests and fixtures is normal; QUAL-02 counts production duplication only.
+      '**/__tests__/**', '**/__mocks__/**', '**/__fixtures__/**', '**/fixtures/**', '**/*.test.*', '**/*.spec.*', '**/test_*.py', '**/*_test.go',
+    ].join(','),
     '--silent',
     '.',
   ]);

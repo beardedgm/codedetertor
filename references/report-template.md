@@ -131,7 +131,7 @@ Questions only the developer can answer: a business choice the right fix depends
 Judgment findings from Pass 4. For each: the checklist ID, location, the issue, the concrete simpler alternative, and its rough diff size. These never count against the verdict; the developer may promote any into the queue as P2.
 
 ## 6. Since Last Audit
-Only when there is a previous run. Match findings by checklist ID and location, after every finding in this run has been verified on its own. List:
+Only when there is a previous run. Match findings by checklist or stack ID plus file and function or symbol (never line numbers, which drift), and `PROJ` findings by file, symbol and description, after every finding in this run has been verified on its own. List:
 - **Fixed:** in the previous run, not found now (note whether its task was marked Done).
 - **Still open:** found in both runs.
 - **Regressed:** a task marked Done in the previous run, found again now. Flag these in the queue and rank them ahead of other tasks of the same priority.
@@ -145,7 +145,7 @@ Up to five highest-impact Confirmed risks. If fewer than five meet the bar, list
 Tasks in the schema below.
 
 ## 9. Checklist Coverage
-One line per gated checklist item (every item except `QUAL-11` to `QUAL-16`), plus any `PROJ-NN` findings, so the verdict can be checked. The rows below are format examples only:
+One line per gated item (every checklist item except `QUAL-11` to `QUAL-16`, plus loaded stack items and `GAP` rows), plus any `PROJ-NN` findings, so the verdict can be checked. The rows below are format examples only:
 
 | ID | Outcome | Where or why |
 |---|---|---|
@@ -154,8 +154,10 @@ One line per gated checklist item (every item except `QUAL-11` to `QUAL-16`), pl
 | SEC-03 | Finding | P0-01 |
 | SEC-15 | Confirmed by developer | Developer, 2026-11-06: "Sentry alerts page me on auth error spikes" |
 | SEC-16 | Accepted | No signup rate limit: invite-only beta; see .audit/accepted.md |
+| MONGO-02 | Passed | Filters built from picked fields in server/routes/*.js |
+| GAP-Supabase | Unverified | No stack reference; checked against the general checklists only |
 
-Outcomes: Passed (a Verified Safeguard or nothing found), Not Applicable, Confirmed by developer (with what they said and the date), Accepted (with the reason), Finding (with task or section reference), Unverified (with the blocker), Decision Needed. The verdict counts come from this table.
+Rows cover every gated checklist item, every non-advisory item of each loaded stack reference, and one `GAP-<technology>` row per detected technology with no stack reference. Outcomes: Passed (a Verified Safeguard or nothing found), Not Applicable, Confirmed by developer (with what they said and the date), Accepted (with the reason), Finding (with task or section reference), Unverified (with the blocker), Decision Needed. The verdict counts come from this table.
 ```
 
 ---

@@ -7,15 +7,15 @@ This pass measures the code against the clean code definition in SKILL.md. Split
 | ID | Criterion | Evidence |
 |---|---|---|
 | QUAL-01 | Function understandability | Cognitive complexity above 15 per function, if the project's linter reports it. Otherwise note it as a missing tool rather than estimating by eye. |
-| QUAL-02 | Duplication | Cloned blocks across files from the duplication output. |
-| QUAL-03 | Dead code | Unused files, exports and dependencies from the dead code output. Verify each before queueing; dynamic imports and framework conventions cause false positives. |
+| QUAL-02 | Duplication | Cloned blocks across production files from the duplication output (test files and fixtures are excluded, since repeated setup there is normal). A clone counts when the copies would have to change together; similar-looking code that changes for different reasons does not. |
+| QUAL-03 | Dead code | Unused files, exports and dependencies from the dead code output. Verify each before queueing; dynamic imports, framework conventions and a published package's public API cause false positives. |
 | QUAL-04 | Coupling | Circular imports. |
 | QUAL-05 | Type rigor | Type checker errors (shared with Pass 3). |
-| QUAL-06 | Suppression debt | Lint and type suppressions, test skips and focus markers, with locations. |
+| QUAL-06 | Suppression debt | Lint and type suppressions, test skips and focus markers, with locations. A suppression with a written reason that still holds is Passed; one with no reason, or a reason that no longer holds, is a finding. `@ts-ignore`, `@ts-nocheck`, committed focus markers and unexplained skips are always findings. |
 | QUAL-07 | Error swallowing | Empty `catch` blocks, and `catch` blocks that only log and continue, prioritized on auth, payment and data-write paths. |
 | QUAL-08 | Consistency | More than one library or pattern doing the same job (two HTTP clients, two validation libraries, two date libraries, two state approaches). |
 | QUAL-09 | Outdated API usage | Patterns from older major versions of frameworks actually in use (see the stack reference files): removed APIs, compatibility shims the current version makes unnecessary, deprecated options. |
-| QUAL-10 | Lint health | Rule violations from the project's own configured linter, and rules that the project has turned off which its framework recommends on. |
+| QUAL-10 | Lint health | Rule violations from the project's own configured linter, and rules the framework recommends that the project has turned off without a recorded reason. |
 
 ## Judgment criteria (advisory only; never P0 or P1)
 

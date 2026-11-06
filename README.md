@@ -82,6 +82,7 @@ To update a cloned install, run `git pull` inside that folder.
 | `/codedetective plan <P1\|P2\|TASK-IDs>` | Plans another tier, or a list of tasks such as `P0-01 P1-03`. |
 | `/codedetective fix <TASK-ID>` | Plans that one task, waits for your approval, fixes it, then stops for review. |
 | `/codedetective fix` | Same, for the next eligible task in priority order. |
+| `/codedetective fix batch <name>` | Builds every task in an approved batch plan back to back, P2 cleanup only, with one review at the end. Stops at the first problem. |
 | `/codedetective status` | Reports the verdict, progress and counts, and lists past audits with their verdicts. Changes nothing. |
 
 Only `fix` ever changes your code, and only after you approve its plan. `plan` never edits anything. Running `/codedetective` on a finished audit that still has open fixes shows where things stand and asks what's next, rather than starting a new audit over your queue. Once nothing is left to fix, it starts a fresh audit to confirm the standard is met.
@@ -96,7 +97,12 @@ Only `fix` ever changes your code, and only after you approve its plan. `plan` n
 | **Pass 3: Architecture** | Module boundaries, client and server contracts, type rigor, configuration, test integrity, and observability. |
 | **Pass 4: Code quality** | Complexity, duplication, dead code, suppressions, swallowed errors, inconsistent patterns, outdated framework APIs, and patterns typical of AI-generated code. |
 
-Stack-specific checks load automatically when Phase 0 detects them: Node.js and Express 5, React 19 and Vite, Mongoose and MongoDB, Cloudflare R2 and Render, and Playwright with JSDoc type checking.
+Stack-specific checks load automatically when Phase 0 detects them: Node.js and Express 5, React 19 and Vite, Mongoose and MongoDB, Cloudflare R2 and Render, and Playwright with JSDoc type checking. Each check has its own ID (such as `EXP-02` or `MONGO-01`) and counts toward the verdict like any checklist item.
+
+**On other stacks** (Supabase, Postgres with Prisma, Next.js, S3, Vercel, Python, Go and so on), the general checklists still apply in full. What's missing is version-specific depth, and the skill is honest about it:
+- Each major technology without a stack file is listed as a coverage gap, so the best verdict it can give is "Standard met, with gaps", naming the technology. You can accept general-depth coverage for it if that's enough for you.
+- During the audit it looks up that technology's current official security and best-practice docs, and treats anything it learns as unproven until it's verified in your code.
+- For other languages, it runs that language's own read-only tools (listed in `references/tools-by-language.md`) by hand, since the evidence script's analyzers are JavaScript tools.
 
 Everything is appended to the report after each phase, so an interrupted audit picks up where it left off.
 
@@ -196,7 +202,7 @@ Every plan names the files and functions it will change, what changes in each, t
 
 **One task at a time.** `/codedetective fix` plans the task, waits for your approval, then builds it.
 
-**A batch.** `/codedetective plan` lays out a group of tasks in the order they must be built, with a short plan for each and a section on how they interact: fixes that touch the same files, an order that matters, or one fix changing what another must do. Approving a batch approves the approach, not the edits. Each task is still built in its own `fix` run, with its own review stop.
+**A batch.** `/codedetective plan` lays out a group of tasks in the order they must be built, with a short plan for each and a section on how they interact: fixes that touch the same files, an order that matters, or one fix changing what another must do. Approving a batch approves the approach, not the edits. Each task is still built in its own `fix` run, with its own review stop. The one exception is a batch made entirely of P2 cleanup tasks: `/codedetective fix batch <name>` builds them back to back, with every task still going through its own snapshot, tests and cheating check, and stops at the first problem, with one review at the end. P0 and P1 fixes always get their own review.
 
 **Plans are rechecked before building.** Each fix changes code that later plans were written against. Before building a planned task, it compares the plan with the current code. If nothing material changed, it says so and builds. If a target moved or was renamed, the approach no longer fits, more files are needed, or a dependency would be added, it plans that task again and asks for a fresh approval.
 
@@ -275,6 +281,7 @@ references/
   stack-mongoose.md
   stack-r2-render.md
   stack-playwright-jsdoc.md
+  tools-by-language.md          Read-only tools for Python, Go, Rust, Ruby, PHP, Java
   report-template.md            Report structure, task format, context template
 scripts/
   collect-evidence.mjs          Read-only analyzer runner
