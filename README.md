@@ -75,7 +75,7 @@ To update a cloned install, run `git pull` inside that folder.
 
 | Command | What it does |
 |---|---|
-| `/codedetective` | Resumes an unfinished audit, or starts a new one if the last audit is complete. Never starts fixing. |
+| `/codedetective` | Resumes an unfinished audit. On a finished audit with open fixes, shows status and asks what's next. Starts a new audit only when nothing is left to fix. Never starts fixing. |
 | `/codedetective new` | Always starts a fresh audit. |
 | `/codedetective pass <1-4>` | Runs or reruns one pass. |
 | `/codedetective plan` | Plans all P0 tasks together in plan mode, for one approval. Changes no code. |
@@ -84,7 +84,7 @@ To update a cloned install, run `git pull` inside that folder.
 | `/codedetective fix` | Same, for the next eligible task in priority order. |
 | `/codedetective status` | Reports the verdict, progress and counts, and lists past audits with their verdicts. Changes nothing. |
 
-Only `fix` ever changes your code, and only after you approve its plan. `plan` never edits anything. Running `/codedetective` after the report is finished just summarizes the queue and waits.
+Only `fix` ever changes your code, and only after you approve its plan. `plan` never edits anything. Running `/codedetective` on a finished audit that still has open fixes shows where things stand and asks what's next, rather than starting a new audit over your queue. Once nothing is left to fix, it starts a fresh audit to confirm the standard is met.
 
 ## How an audit runs
 
@@ -105,7 +105,7 @@ Everything is appended to the report after each phase, so an interrupted audit p
 Every audit is a separate run in its own dated folder under `.audit/runs/`, so a new audit always starts fresh and earlier ones stay as history.
 
 - **Resuming.** Running `/codedetective` again continues an audit that hasn't finished, such as one paused at the Pass 1 review. If that audit is more than 3 days old or the code has changed since it started, it asks whether to resume or start over.
-- **Starting fresh.** Once an audit is complete, the next `/codedetective` starts a new one. `/codedetective new` starts a new one any time.
+- **Starting fresh.** Once an audit is complete and nothing is left to fix, the next `/codedetective` starts a new one. If fixes are still open, it asks first instead of replacing your queue. `/codedetective new` starts a new one any time.
 - **Comparing.** A new audit compares itself with the previous one by checklist ID: what was fixed, what is still open, what is new, and anything that came back after being fixed. Regressions are flagged and ranked first within their priority. Nothing is copied over: every finding is re-verified against today's code.
 - **Fixing.** `fix`, `plan` and `status` work on the current audit's queue, even across several days.
 - **Older files.** If `.audit/` holds files from before runs existed, they are moved into a `legacy` run folder automatically before anything else happens.
@@ -162,11 +162,17 @@ Every report opens with a verdict:
 
 | Verdict | Meaning |
 |---|---|
+| **Audit in progress (Pass N of 4)** | The audit hasn't finished, so no other verdict applies yet, even if every task found so far is fixed. |
 | **Standard met** | Every applicable checklist item passed or doesn't apply, nothing went unchecked, no decisions are waiting on you, and nothing is left to fix. |
 | **Standard met, with gaps** | Nothing left to fix, but some items couldn't be checked or a decision is waiting on you. It lists exactly what stands between this and Standard met. |
 | **Fixes remaining** | Fixes remain, counted by priority. It also tells you when no P0 or P1 tasks remain, which is the first milestone. |
 
-The verdict carries its evidence, for example: *"Standard met: 41 of 48 gated items passed, 7 not applicable, at commit abc123 on 2026-11-06."* A Checklist Coverage table at the end of the report shows the outcome of every item, so you can check the claim.
+The verdict carries its evidence, for example: *"Standard met: 38 of 48 gated items passed, 7 not applicable, 2 confirmed by developer (SEC-15, ARCH-06), 1 accepted (SEC-16), at commit abc123 on 2026-11-06."* A Checklist Coverage table at the end of the report shows the outcome of every item, so you can check the claim.
+
+Two outcomes exist so the finish line is always reachable:
+
+- **Confirmed by you.** Some things can't be proven from code at all: whether alerts actually reach a person, whether backups exist, a setting in your hosting dashboard. At the end of an audit it asks you about these in one grouped question. Your answer settles them, and the verdict names which ones rest on your word.
+- **Accepted by you.** When a fix depends on a business choice (how strict a rate limit should be), or a task can't be fixed without weakening tests or security, it becomes a decision for you. If you accept it with a reason, it's recorded in `.audit/accepted.md`, counted as settled, and not raised again unless the code it covers changes.
 
 - **Everything that fails the standard gets fixed.** Low-impact findings are fixed at low priority, not skipped.
 - **Opinions never block the verdict.** Pass 4's judgment calls (design fit, naming, simplicity) are advisory only, so "could be written differently" never keeps you from the finish line.
@@ -235,6 +241,7 @@ It never adds a dependency without your approval, and never commits, pushes, dep
 | `.audit/runs/<date>/scratch/` | Throwaway measurement scripts. |
 | `.audit/current-run` | Which run is current. |
 | `.audit/false-positives.md` | Findings refuted for recurring reasons. Maintained by the skill. |
+| `.audit/accepted.md` | Items you accepted, with your reasons. Honoured by later audits. |
 | `.audit/context.md` | Optional. Your project context, written by you. |
 
 ## Recommended analyzers
