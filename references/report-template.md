@@ -3,6 +3,7 @@
 ## Contents
 - Optional developer context file (`.audit/context.md`)
 - False positives file (`.audit/false-positives.md`)
+- Accepted items file (`.audit/accepted.md`)
 - Plan files (`plans/` in the run folder)
 - Report structure (`code-health-report.md` in the run folder)
 - Since last audit
@@ -43,6 +44,21 @@ Persistent exclusions, read at the start of every invocation. Add an entry whene
 
 ---
 
+## Accepted items file
+
+Items the developer decided on: an answered Decision Needed, a finding they chose not to fix, or a blocked task they accepted. Read at the start of every invocation and honoured across runs, so the same item is not raised again. If the code it covers changes in a way that invalidates the reason, raise it again and say why. Facts the developer confirmed (Confirmed by developer) are recorded in the run's report, not here, because they can change between audits and are asked again each time.
+
+```markdown
+# Accepted
+## <Checklist ID>: <short name>
+- Where: <path :: symbol>
+- Decision: <what the developer chose, in their words>
+- Reason: <why>
+- Accepted: <date>, during <run-id> <task or section>
+```
+
+---
+
 ## Plan files
 
 Approved plans are saved in the current run's `plans/` folder after plan mode, because plan mode's own file does not survive sessions. One file per single-task plan, one per batch.
@@ -74,7 +90,7 @@ Write `code-health-report.md` in the current run's folder (`.audit/runs/<run-id>
 ```markdown
 # <Project Name>: Code Health & Self-Remediation Plan
 
-**Verdict:** <Standard met | Standard met, with gaps | Fixes remaining>: <one line with the evidence, e.g. "41 of 48 gated items passed, 7 not applicable, at commit abc123 on 2026-11-06", or open task counts by priority, or "All findings fixed through commit def456; run /codedetective new to confirm the standard is met">
+**Verdict:** <Audit in progress (Pass N of 4) | Standard met | Standard met, with gaps | Fixes remaining>: <one line with the evidence, e.g. "38 of 48 gated items passed, 7 not applicable, 2 confirmed by developer (SEC-15, ARCH-06), 1 accepted (SEC-16), at commit abc123 on 2026-11-06", or open task counts by priority, or "All findings fixed through commit def456; run /codedetective new to confirm the standard is met">
 
 ## 0. Progress
 - Run: <run-id>, started <date and time> against commit <short hash>
@@ -109,7 +125,7 @@ For each:
 - **Next Step:** the specific command, trace or environment that would confirm or dismiss it.
 
 ## 4. Decisions Needed
-Questions only the developer can answer, where the right fix depends on a business choice. For each: the checklist ID, what was found, the choice to make, and the options with their trade-offs. Once answered, a decision may become a task.
+Questions only the developer can answer: a business choice the right fix depends on, a blocked task, or a fact the code cannot show. For each: the checklist ID, what was found, the choice or fact needed, and the options with their trade-offs. Once answered, record the outcome here and in Checklist Coverage: a task, Accepted (and an entry in `.audit/accepted.md`), Confirmed by developer, or a Finding if the developer says something is missing.
 
 ## 5. Advisory Notes
 Judgment findings from Pass 4. For each: the checklist ID, location, the issue, the concrete simpler alternative, and its rough diff size. These never count against the verdict; the developer may promote any into the queue as P2.
@@ -136,8 +152,10 @@ One line per gated checklist item (every item except `QUAL-11` to `QUAL-16`), pl
 | SEC-01 | Passed | Verified Safeguard: session cookies HttpOnly, Secure, SameSite=Lax in server/auth.js |
 | SEC-20 | Not Applicable | No LLM features |
 | SEC-03 | Finding | P0-01 |
+| SEC-15 | Confirmed by developer | Developer, 2026-11-06: "Sentry alerts page me on auth error spikes" |
+| SEC-16 | Accepted | No signup rate limit: invite-only beta; see .audit/accepted.md |
 
-Outcomes: Passed (a Verified Safeguard or nothing found), Not Applicable, Finding (with task or section reference), Unverified (with the blocker), Decision Needed. The verdict counts come from this table.
+Outcomes: Passed (a Verified Safeguard or nothing found), Not Applicable, Confirmed by developer (with what they said and the date), Accepted (with the reason), Finding (with task or section reference), Unverified (with the blocker), Decision Needed. The verdict counts come from this table.
 ```
 
 ---
@@ -192,4 +210,4 @@ VERIFICATION RESULTS:
 
 ## Progress tracking
 
-When a plan is approved, set each covered task's `PROGRESS` to Planned and fill in `PLAN`. When a task finishes, set its `PROGRESS` to Done, fill in `VERIFICATION RESULTS`, and update section 0. When a task is blocked (for example it cannot pass without weakening security or tests, or it needs a dependency the user has not approved), set `PROGRESS` to `Blocked: <reason>` and stop. The next eligible task is the first in queue order that is Queued or Planned and whose prerequisites are all Done; while a batch plan is active, take its next task in the batch's order. Mark the Pass 1 review stop as cleared when the user invokes reconnaissance again after it.
+When a plan is approved, set each covered task's `PROGRESS` to Planned and fill in `PLAN`. When a task finishes, set its `PROGRESS` to Done, fill in `VERIFICATION RESULTS`, and update section 0. When a task is blocked (for example it cannot pass without weakening security or tests, or it needs a dependency the user has not approved), set `PROGRESS` to `Blocked: <reason>`, add it to Decisions Needed, and stop. The next eligible task is the first in queue order that is Queued or Planned and whose prerequisites are all Done; while a batch plan is active, take its next task in the batch's order. Mark the Pass 1 review stop as cleared when the user invokes reconnaissance again after it.

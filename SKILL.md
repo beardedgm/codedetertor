@@ -29,6 +29,7 @@ Every audit is a **run** with its own folder, so each new audit starts fresh and
 .audit/
   context.md            developer context, shared by all runs
   false-positives.md    refuted findings, shared by all runs
+  accepted.md           accepted items with the developer's reasons, shared by all runs
   current-run           one line: the ID of the current run
   runs/
     <run-id>/           e.g. 2026-11-04-1150 (local date and time the run started)
@@ -42,13 +43,13 @@ The **current run** is the one named in `.audit/current-run`; if that file is mi
 
 **Starting a run.** Create the folder, write its ID to `.audit/current-run`, and start at Phase 0. If an earlier complete run exists, it is the **previous run**: after Pass 4, compare against it (see "Since last audit" in `references/report-template.md`). Never copy findings or tasks from it; every finding in the new run is verified against today's code, and the comparison is matched by checklist ID and location.
 
-**Legacy files.** Before anything else, if `.audit/` holds files from before runs existed (such as `.audit/code-health-report.md`, `.audit/evidence/`, `.audit/plans/`, or loose scripts), move everything except `context.md`, `false-positives.md`, `current-run` and `runs/` into `.audit/runs/<date>-0000-legacy/`, using the date the old report was last modified. Mention the move in one line. A legacy run is history only: never resume it or fix from it, and use it for the "since last audit" comparison only where its findings map cleanly to checklist IDs.
+**Legacy files.** Before anything else, if `.audit/` holds files from before runs existed (such as `.audit/code-health-report.md`, `.audit/evidence/`, `.audit/plans/`, or loose scripts), move everything except `context.md`, `false-positives.md`, `accepted.md`, `current-run` and `runs/` into `.audit/runs/<date>-0000-legacy/`, using the date the old report was last modified. Mention the move in one line. A legacy run is history only: never resume it or fix from it, and use it for the "since last audit" comparison only where its findings map cleanly to checklist IDs.
 
 ## Modes
 
 | Invocation | Mode |
 |---|---|
-| `/codedetective` or `/codedetective start` | If the current run is unfinished, resume it where it stopped. Otherwise (no runs, or the current run is complete) start a new run. An unfinished run that is stale gets a question first; see below. |
+| `/codedetective` or `/codedetective start` | If the current run is unfinished, resume it where it stopped (a stale one gets a question first; see below). If the current run is complete but its queue still has open tasks, do not start a new audit: show its status and ask what to do next (fix the next task, plan a batch, start a new audit, or stop). If there are no runs, or the current run is complete with nothing left to fix, start a new run. |
 | `/codedetective new` | Always start a new run. An unfinished current run is marked Abandoned and kept as history. |
 | `/codedetective pass <1-4>` | Run or rerun that pass only. |
 | `/codedetective plan <P0\|P1\|P2\|TASK-IDs>` | Plan a batch of tasks in plan mode, in priority and dependency order, for one approval. Read-only: changes no code. Defaults to all P0 tasks when no target is given. |
@@ -60,6 +61,8 @@ The **current run** is the one named in `.audit/current-run`; if that file is mi
 
 **Stale unfinished runs.** Before resuming, check whether the unfinished run has gone stale: it started more than 3 days ago, or tracked source files have changed since its recorded commit. If so, ask (multiple choice when available) whether to resume it or start a new run, and say what changed. Do not guess.
 
+**Never strand a queue.** A new audit makes the new run current, and the old run's open tasks and approved plans become history. Only start one over open tasks when the user chooses it (`new`, or that option in the question).
+
 **Only `fix` (or `next`) ever starts remediation.** `plan` produces plans and never edits code. No other invocation authorizes changes to the codebase, including a no-argument resume after reconnaissance is complete. Invoking `/codedetective` again after a reconnaissance stop counts as approval to continue reconnaissance; it never counts as approval to fix. If arguments are ambiguous, state which mode you chose in one line and proceed.
 
 ## Before anything else
@@ -68,7 +71,7 @@ The **current run** is the one named in `.audit/current-run`; if that file is mi
 2. Add `.audit/` to `.git/info/exclude` (a local, untracked git file) so the case file never shows up as a change.
 3. Move any legacy files into a legacy run (see "Audit runs"), then decide whether this invocation resumes the current run or starts a new one.
 4. Read developer context, treating every claim as a hypothesis to verify: `.audit/context.md`, then `CLAUDE.md`, `AGENTS.md`, and the README. If `.audit/context.md` is missing, offer the template in `references/report-template.md` once and continue without it.
-5. Read `.audit/false-positives.md` if it exists. Never report a finding that matches a recorded exclusion unless the code has changed in a way that invalidates the exclusion's reason.
+5. Read `.audit/false-positives.md` and `.audit/accepted.md` if they exist. Never report a finding that matches a recorded false positive, and report a matching accepted item as Accepted, unless the code has changed in a way that invalidates the recorded reason.
 
 ## Ground rules (every mode)
 
@@ -93,7 +96,7 @@ The value of the report depends entirely on whether its claims can be trusted. S
 - **Probable:** strongly suggested but not proven. Must state the specific next step that would confirm or dismiss it ("to confirm, run X" or "trace Y into Z"). A Probable item without a next step is noise; drop it.
 - **Unverified / Limitation:** a real concern that tooling, environment or sandbox limits prevented you from evaluating.
 
-Also record **Verified Safeguards** (existing defenses that work, so the developer knows what not to break), **Not Applicable** items (with a one-line reason), and **Decisions Needed**: places where the right fix depends on a business choice the developer owns (a rate limit, a token lifetime, what data to keep and for how long). Decisions Needed items are questions for the user, never queued as tasks until the user answers. Never force findings onto technology the project does not use, and never invent file paths, line numbers, command output or measurements.
+Also record **Verified Safeguards** (existing defenses that work, so the developer knows what not to break), **Confirmed by developer** items (facts the code cannot show, such as alerting, backups or a hosting setting, that the developer states are in place, recorded with what they said and the date), **Accepted** items (a Decision Needed the developer has answered, or a finding they chose not to fix, recorded with their reason and the date), **Not Applicable** items (with a one-line reason), and **Decisions Needed**: places where the right fix depends on a business choice the developer owns (a rate limit, a token lifetime, what data to keep and for how long). Decisions Needed items are questions for the user, never queued as tasks until the user answers. Never force findings onto technology the project does not use, and never invent file paths, line numbers, command output or measurements.
 
 **Checklist IDs.** Every checklist item has a stable ID (`SEC-07`, `PERF-03`, `ARCH-02`, `QUAL-06`). Cite it in every finding, task, plan and false-positive entry, so two audits of the same repo can be compared and a repeat finding is recognizable. A finding that fits no checklist item uses `PROJ-NN`, numbered within the report. Checklist items carry **caveats** where common advice goes too far or a defense only looks like one; if the code relies on what a caveat calls insufficient, that reliance is the finding.
 
@@ -113,15 +116,33 @@ Only Confirmed issues, or preventive hardening you explicitly justify, may enter
 
 ## Verdict
 
-Every report opens with a verdict, so reaching the standard is stated plainly instead of implied by an empty section. Gated items are every checklist item except the Pass 4 judgment criteria (`QUAL-11` to `QUAL-16`), plus any `PROJ-NN` findings; each ends as Passed (a Verified Safeguard or nothing found), Not Applicable, Finding, Unverified, or Decision Needed, recorded in the Checklist Coverage section.
+Every report opens with a verdict, so reaching the standard is stated plainly instead of implied by an empty section. Gated items are every checklist item except the Pass 4 judgment criteria (`QUAL-11` to `QUAL-16`), plus any `PROJ-NN` findings. Each ends with one outcome, recorded in the Checklist Coverage section:
 
-- **Standard met:** every applicable gated item Passed or is Not Applicable, nothing is Unverified, no Decisions Needed are pending, and the queue has no open tasks. Advisory notes may remain.
-- **Standard met, with gaps:** the queue is empty, but some items are Unverified or Decisions Needed are pending. List them; they are what stands between this and Standard met.
-- **Fixes remaining:** open tasks remain. Give counts by priority, and say when no P0 or P1 tasks remain, because that is the first milestone.
+| Outcome | Counts toward Standard met |
+|---|---|
+| Passed (a Verified Safeguard, or checked and nothing found) | Yes |
+| Not Applicable | Yes |
+| Confirmed by developer (a fact outside the code, stated by the developer) | Yes, listed by name in the verdict |
+| Accepted (an answered decision, or a finding the developer chose not to fix, with their reason) | Yes, listed by name in the verdict |
+| Finding (an open or blocked task) | No |
+| Unverified (could not be checked) | No |
+| Decision Needed (waiting on the developer) | No |
 
-Write it as one line with the evidence behind it, for example: "Standard met: 41 of 48 gated items passed, 7 not applicable, at commit abc123 on 2026-11-06." Recompute the verdict at the end of every pass and every fix.
+Verdict levels:
+- **Audit in progress (Pass N of 4):** until Pass 4 is written. Items in passes not yet run have no outcome, so no other verdict applies. Report the open task count by priority alongside it.
+- **Standard met:** the audit is complete, every gated item counts toward Standard met, and the queue has no open tasks. Advisory notes may remain.
+- **Standard met, with gaps:** the audit is complete and the queue is empty, but some items are Unverified or Decision Needed. List them; they are what stands between this and Standard met.
+- **Fixes remaining:** the audit is complete and open tasks remain. Give counts by priority, and say when no P0 or P1 tasks remain, because that is the first milestone.
 
-Only an audit can confirm **Standard met**. When fixing empties the queue, the verdict becomes "All findings fixed through commit `<hash>`; run `/codedetective new` to confirm the standard is met", because fixes change code the audit never saw. A fresh run that confirms nothing is what earns the verdict.
+Write it as one line with the evidence behind it, for example: "Standard met: 38 of 48 gated items passed, 7 not applicable, 2 confirmed by developer (SEC-15, ARCH-06), 1 accepted (SEC-16), at commit abc123 on 2026-11-06." Recompute the verdict at the end of every pass and every fix.
+
+**Closing the gaps that code cannot.** Some items can never be proven from the repository: whether alerts reach a person, whether backups exist, a hosting dashboard setting. At the end of reconnaissance, ask the developer about each such Unverified item in one grouped question, saying exactly what would confirm it. Their answer makes it Confirmed by developer, or a Finding if they say it is missing. Never mark an item Confirmed by developer on your own inference. An Unverified item caused by a missing tool stays Unverified, and the summary names the tool that would check it.
+
+**Blocked tasks become decisions.** A task that cannot pass without weakening security or tests is a Decision Needed: the developer either accepts it with a reason, or keeps it open for a different approach.
+
+**Accepted items persist.** Record every Accepted item in `.audit/accepted.md` (shared across runs; format in `references/report-template.md`) with its checklist ID, file and symbol, reason and date. Later audits honour it and report the item as Accepted, unless the code it covers has changed in a way that invalidates the reason, in which case raise it again and say why.
+
+Only an audit can confirm **Standard met**. When fixing empties the queue of a complete audit, the verdict becomes "All findings fixed through commit `<hash>`; run `/codedetective new` to confirm the standard is met", because fixes change code the audit never saw. A fresh run that confirms nothing is what earns the verdict. Mid-audit, fixing every task found so far changes nothing: the verdict stays Audit in progress.
 
 ## Reconnaissance phases
 
@@ -147,7 +168,7 @@ Write the report using the structure and task schema in `references/report-templ
 
 **Passes 2 to 4 run without stopping.** After Pass 1 is cleared, run Passes 2, 3 and 4 in one go, appending each to the report, unless the context runs low, in which case stop, say which pass is next, and ask whether to continue.
 
-**End of reconnaissance.** When Pass 4 is written, the run is complete. If there is a previous run, write the "Since last audit" comparison. Fill in Checklist Coverage and compute the verdict. Then give the summary, leading with the verdict. If the verdict is Standard met, say so plainly, offer only to stop or to review the advisory notes, and do not search further. Otherwise offer three choices, using a multiple-choice question if the tool is available:
+**End of reconnaissance.** When Pass 4 is written, the run is complete. If there is a previous run, write the "Since last audit" comparison. Fill in Checklist Coverage. Ask the grouped question about items only the developer can confirm (see Verdict), record the answers, then compute the verdict. Then give the summary, leading with the verdict. If the verdict is Standard met, say so plainly, offer only to stop or to review the advisory notes, and do not search further. Otherwise offer three choices, using a multiple-choice question if the tool is available:
 1. **Fix the next task:** plan the top eligible task, get approval, and build it.
 2. **Plan a batch:** plan all P0 tasks (or another tier or set the user names) together, for one approval. Recommend this when there are several P0 or P1 tasks, because seeing them together catches fixes that touch the same code.
 3. **Stop here:** leave the report for the user to read.
