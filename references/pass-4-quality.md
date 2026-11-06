@@ -41,4 +41,4 @@ Look specifically for these, because they accumulate quickly when code is genera
 
 ## Prioritization
 
-Maintainability findings are usually P2. Order them by how often the code is changed or read (hot files first), not by how ugly they are, because cleaning code nobody touches rarely pays back.
+Maintainability findings are usually P2. Order them by how often the code is changed or read (hot files first), not by how ugly they are, because cleaning code nobody touches rarely pays back. Every checkable finding is still fixed; hotness only sets the order.
