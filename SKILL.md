@@ -79,7 +79,7 @@ Say in one line that the report was upgraded. If the upgrade leaves items Unveri
 2. Add `.audit/` to `.git/info/exclude` (a local, untracked git file) so the case file never shows up as a change.
 3. Move any legacy files into a legacy run (see "Audit runs"), then decide whether this invocation resumes the current run or starts a new one.
 4. Read developer context, treating every claim as a hypothesis to verify: `.audit/context.md`, then `CLAUDE.md`, `AGENTS.md`, and the README. If `.audit/context.md` is missing, offer the template in `references/report-template.md` once and continue without it.
-5. Read `.audit/false-positives.md` and `.audit/accepted.md` if they exist. Never report a finding that matches a recorded false positive, and report a matching accepted item as Accepted, unless the code has changed in a way that invalidates the recorded reason.
+5. Read `.audit/false-positives.md` and `.audit/accepted.md` if they exist. Treat both as earlier conclusions to re-check, not rules: before honouring a false positive, confirm against the current code that its reason still holds, and handle accepted items as described under "Earlier decisions are re-evaluated".
 
 ## Ground rules (every mode)
 
@@ -142,13 +142,19 @@ Verdict levels:
 - **Standard met, with gaps:** the audit is complete and the queue is empty, but some items are Unverified or Decision Needed. List them; they are what stands between this and Standard met.
 - **Fixes remaining:** the audit is complete and open tasks remain. Give counts by priority, and say when no P0 or P1 tasks remain, because that is the first milestone.
 
-Write it as one line with the evidence behind it, for example: "Standard met: 38 of 48 gated items passed, 7 not applicable, 2 confirmed by developer (SEC-15, ARCH-06), 1 accepted (SEC-16), at commit abc123 on 2026-11-06." Recompute the verdict at the end of every pass and every fix.
+Write it as one line with the evidence behind it, for example: "Standard met: 38 of 48 gated items passed, 7 not applicable, 2 confirmed by developer (SEC-15, ARCH-06), 1 accepted and reconfirmed today (SEC-16), at commit abc123 on 2026-11-06." Recompute the verdict at the end of every pass and every fix.
 
 **Closing the gaps that code cannot.** Some items can never be proven from the repository: whether alerts reach a person, whether backups exist, a hosting dashboard setting. At the end of reconnaissance, ask the developer about each such Unverified item in one grouped question, saying exactly what would confirm it. Their answer makes it Confirmed by developer, or a Finding if they say it is missing. Never mark an item Confirmed by developer on your own inference. An Unverified item caused by a missing tool stays Unverified, and the summary names the tool that would check it.
 
 **Blocked tasks become decisions.** A task that cannot pass without weakening security or tests is a Decision Needed: the developer either accepts it with a reason, or keeps it open for a different approach.
 
-**Accepted items persist.** Record every Accepted item in `.audit/accepted.md` (shared across runs; format in `references/report-template.md`) with its checklist ID, file and symbol, reason and date. Later audits honour it and report the item as Accepted, unless the code it covers has changed in a way that invalidates the reason, in which case raise it again and say why.
+**Earlier decisions are re-evaluated, never obeyed blindly.** Record every Accepted item in `.audit/accepted.md` (shared across runs; format in `references/report-template.md`) with its checklist ID, file and symbol, decision, reason, a testable premise where the reason has one, and dates. A recorded decision is a record of what the developer chose and why, not an instruction to stay quiet. The goal is the standard; developers forget old choices, and the reasons behind them stop being true.
+- **Every audit still checks the item** like any other. A decision changes how a confirmed problem is reported, never whether it is looked at.
+- **Test the premise against the code.** If the code now contradicts the recorded reason (the "invite-only beta" has public signup, the "admin-only" endpoint is reachable by users), re-open the item as a Finding or a Decision Needed, with the evidence.
+- **Speak up when there is a reason to.** Whenever you have concrete evidence that reversing a decision would better meet the standard (the risk is larger than the reason assumed, a cheaper or cleaner fix now exists, the surrounding code or context changed, or a new advisory or standard applies), raise a **Reconsider** recommendation in Decisions Needed: the decision and its date, what changed, the evidence, the fix and its rough cost. Never hold back a real problem because a decision exists.
+- **Do not re-argue without a reason.** A decision with no new evidence against it carries forward quietly, so audits do not go in circles over settled choices.
+- **Reconfirm on a schedule.** At the start of each new audit (not on a resume), ask one grouped question listing every carried-forward decision with its date and reason, Reconsider recommendations first, so the developer can keep, reverse or review each. Include always: any item that would otherwise be P0 or P1, and any decision older than six months. If there is no answer, keep the decisions but mark them "carried forward, not reconfirmed".
+- **Show what rests on old decisions.** In the verdict and Checklist Coverage, separate Accepted items reconfirmed this audit from those carried forward unconfirmed.
 
 Only an audit can confirm **Standard met**. When fixing empties the queue of a complete audit, the verdict becomes "All findings fixed through commit `<hash>`; run `/codedetective new` to confirm the standard is met", because fixes change code the audit never saw. A fresh run that confirms nothing is what earns the verdict. Mid-audit, fixing every task found so far changes nothing: the verdict stays Audit in progress.
 

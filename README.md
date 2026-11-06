@@ -179,7 +179,16 @@ The verdict carries its evidence, for example: *"Standard met: 38 of 48 gated it
 Two outcomes exist so the finish line is always reachable:
 
 - **Confirmed by you.** Some things can't be proven from code at all: whether alerts actually reach a person, whether backups exist, a setting in your hosting dashboard. At the end of an audit it asks you about these in one grouped question. Your answer settles them, and the verdict names which ones rest on your word.
-- **Accepted by you.** When a fix depends on a business choice (how strict a rate limit should be), or a task can't be fixed without weakening tests or security, it becomes a decision for you. If you accept it with a reason, it's recorded in `.audit/accepted.md`, counted as settled, and not raised again unless the code it covers changes.
+- **Accepted by you.** When a fix depends on a business choice (how strict a rate limit should be), or a task can't be fixed without weakening tests or security, it becomes a decision for you. If you accept it with a reason, it's recorded in `.audit/accepted.md` and counts as settled.
+
+**Past decisions are re-evaluated, not obeyed.** A recorded decision is a note of what you chose and why, never an instruction to stay quiet. Later audits:
+- still check every accepted item, and test its reason against the code. If you said "invite-only beta" and signup is now public, the decision is reopened with the evidence.
+- speak up with a **Reconsider** recommendation whenever there's real evidence that reversing a decision would better meet the standard: the risk is bigger than assumed, a cheaper fix now exists, or something changed. You get the evidence and the cost of the fix.
+- don't re-argue a decision when nothing new argues against it, so audits don't go in circles.
+- ask you once, at the start of each new audit, to keep or review the decisions being carried forward. Security-level ones and anything older than six months are always on that list.
+- show in the verdict which accepted items you reconfirmed this time and which were carried forward without reconfirmation.
+
+The same goes for the skill's own past conclusions: a finding it once ruled a false positive is re-checked against the current code before it's set aside again.
 
 - **Everything that fails the standard gets fixed.** Low-impact findings are fixed at low priority, not skipped.
 - **Opinions never block the verdict.** Pass 4's judgment calls (design fit, naming, simplicity) are advisory only, so "could be written differently" never keeps you from the finish line.

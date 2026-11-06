@@ -46,7 +46,7 @@ Persistent exclusions, read at the start of every invocation. Add an entry whene
 
 ## Accepted items file
 
-Items the developer decided on: an answered Decision Needed, a finding they chose not to fix, or a blocked task they accepted. Read at the start of every invocation and honoured across runs, so the same item is not raised again. If the code it covers changes in a way that invalidates the reason, raise it again and say why. Facts the developer confirmed (Confirmed by developer) are recorded in the run's report, not here, because they can change between audits and are asked again each time.
+Items the developer decided on: an answered Decision Needed, a finding they chose not to fix, or a blocked task they accepted. Read at the start of every invocation and carried across runs, but re-evaluated, never obeyed blindly (see "Earlier decisions are re-evaluated" in SKILL.md): each audit still checks the item, tests its premise against the code, and raises a Reconsider recommendation when there is evidence that reversing it would better meet the standard. Facts the developer confirmed (Confirmed by developer) are recorded in the run's report, not here, because they can change between audits and are asked again each time.
 
 ```markdown
 # Accepted
@@ -54,7 +54,9 @@ Items the developer decided on: an answered Decision Needed, a finding they chos
 - Where: <path :: symbol>
 - Decision: <what the developer chose, in their words>
 - Reason: <why>
+- Premise to check: <a condition the code can confirm, e.g. "signup requires an invite code", or "none">
 - Accepted: <date>, during <run-id> <task or section>
+- Last reconfirmed: <date, or "not yet">
 ```
 
 ---
@@ -90,7 +92,7 @@ Write `code-health-report.md` in the current run's folder (`.audit/runs/<run-id>
 ```markdown
 # <Project Name>: Code Health & Self-Remediation Plan
 
-**Verdict:** <Audit in progress (Pass N of 4) | Standard met | Standard met, with gaps | Fixes remaining>: <one line with the evidence, e.g. "38 of 48 gated items passed, 7 not applicable, 2 confirmed by developer (SEC-15, ARCH-06), 1 accepted (SEC-16), at commit abc123 on 2026-11-06", or open task counts by priority, or "All findings fixed through commit def456; run /codedetective new to confirm the standard is met">
+**Verdict:** <Audit in progress (Pass N of 4) | Standard met | Standard met, with gaps | Fixes remaining>: <one line with the evidence, e.g. "38 of 48 gated items passed, 7 not applicable, 2 confirmed by developer (SEC-15, ARCH-06), 1 accepted and reconfirmed today (SEC-16), at commit abc123 on 2026-11-06", or open task counts by priority, or "All findings fixed through commit def456; run /codedetective new to confirm the standard is met">
 
 ## 0. Progress
 - Run: <run-id>, started <date and time> against commit <short hash>
@@ -125,7 +127,7 @@ For each:
 - **Next Step:** the specific command, trace or environment that would confirm or dismiss it.
 
 ## 4. Decisions Needed
-Questions only the developer can answer: a business choice the right fix depends on, a blocked task, or a fact the code cannot show. For each: the checklist ID, what was found, the choice or fact needed, and the options with their trade-offs. Once answered, record the outcome here and in Checklist Coverage: a task, Accepted (and an entry in `.audit/accepted.md`), Confirmed by developer, or a Finding if the developer says something is missing.
+Questions only the developer can answer: a business choice the right fix depends on, a blocked task, a fact the code cannot show, or a **Reconsider** recommendation about an earlier decision (listed first, with the decision's date, what changed, the evidence, and the fix and its cost). For each: the checklist ID, what was found, the choice or fact needed, and the options with their trade-offs. Once answered, record the outcome here and in Checklist Coverage: a task, Accepted (and an entry in `.audit/accepted.md`), Confirmed by developer, or a Finding if the developer says something is missing.
 
 ## 5. Advisory Notes
 Judgment findings from Pass 4. For each: the checklist ID, location, the issue, the concrete simpler alternative, and its rough diff size. These never count against the verdict; the developer may promote any into the queue as P2.
@@ -153,7 +155,7 @@ One line per gated item (every checklist item except `QUAL-11` to `QUAL-16`, plu
 | SEC-20 | Not Applicable | No LLM features |
 | SEC-03 | Finding | P0-01 |
 | SEC-15 | Confirmed by developer | Developer, 2026-11-06: "Sentry alerts page me on auth error spikes" |
-| SEC-16 | Accepted | No signup rate limit: invite-only beta; see .audit/accepted.md |
+| SEC-16 | Accepted, reconfirmed 2026-11-06 | No signup rate limit: invite-only beta; premise checked, signup still requires an invite code |
 | MONGO-02 | Passed | Filters built from picked fields in server/routes/*.js |
 | GAP-Supabase | Unverified | No stack reference; checked against the general checklists only |
 
