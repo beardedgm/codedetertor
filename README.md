@@ -270,10 +270,13 @@ npm install --save-dev typescript eslint knip madge jscpd
 
 For React projects, also enable `eslint-plugin-react-hooks` (recommended preset) and `eslint-plugin-sonarjs` for complexity. Install `gitleaks` separately for secret scanning.
 
-Tools that send data to public vulnerability databases (`npm audit`, `pnpm audit`, `osv-scanner`) run only if you agree.
+Tools that send data to public vulnerability databases (`npm audit`, `pnpm audit`, `osv-scanner`) run only if you agree. The audit asks once and remembers your answer in `.audit/context.md`. If you say no, the known-vulnerability check (SEC-19) stays Unverified.
 
 A few details worth knowing:
-- **Project references are followed.** The type check checks every project a solution-style `tsconfig.json` points to, such as the default Vite layout. If it ends up checking zero files, it says so, rather than reporting zero errors.
+- **Saved evidence never holds your code.** ESLint's saved output keeps where each problem is and what it is, not the file's source; duplicated code blocks are dropped from the jscpd report; and long key-like values quoted in error messages are redacted. A secret in your code cannot reach the transcript through the evidence files.
+- **Each check says whether it really ran.** Only `ran` counts as a complete check. `partial` means the findings are real but a zero proves nothing for what was skipped. Anything else (skipped, missing, error, timeout) means the check did not happen, and the items that rely on it stay Unverified.
+- **Project references are followed.** The type check checks every project a solution-style `tsconfig.json` points to, such as the default Vite layout. If it ends up checking zero files, it says so, rather than reporting zero errors. In a monorepo whose composite projects have not been built, it reports the check as `partial` instead of counting "not built" as type errors.
+- **Ignored files are not scanned.** Anything your `.gitignore` excludes, such as a Python `.venv` or a Rust `target` folder, is left out, so installed packages never show up as your findings.
 - **Build output can be secret-scanned.** Pass `--scan-dir dist` after a local build. gitleaks scans it with values redacted, so a found secret is never printed.
 - **Non-JavaScript code is partly covered.** The built-in scan for suppressions and skipped tests also covers Python, Go, Rust and several other languages. If it finds no source files at all, it reports "not applicable", not a clean result.
 
