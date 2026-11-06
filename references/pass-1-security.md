@@ -56,7 +56,7 @@ For any archive or bulk import: path traversal (Zip Slip), decompression size li
 ## Secrets, crypto & data protection
 
 **SEC-12 Secrets & Sensitive Data** [A04; ASVS V11, V14]
-Verify secrets, keys, tokens and personal data cannot leak into client bundles, logs, error trackers, analytics, backups, exports or error responses. If a production build is safe to run locally into a temp directory, scan the built output for secret patterns, not just the source; report location and type, never the value. Check how encryption keys are stored and used. Webhook and signature comparisons use timing-safe equality.
+Verify secrets, keys, tokens and personal data cannot leak into client bundles, logs, error trackers, analytics, backups, exports or error responses. If a production build is safe to run locally into a temp directory, secret-scan the built output with the evidence script's `--scan-dir` (never a plain text search, which can print the secret); report location and type, never the value. Check how encryption keys are stored and used. Webhook and signature comparisons use timing-safe equality.
 Caveat: removing a secret from the current code does not remove it from git history. A secret that was ever committed needs rotating, and the finding says so.
 
 **SEC-13 Account & Data Deletion** [A04; ASVS V14]
