@@ -27,6 +27,7 @@ The developer can drop this at `.audit/context.md` to sharpen the investigation.
 - Production services that must never be touched:
 - Areas out of scope:
 - Network tools allowed (public vulnerability databases): <yes | no>
+- Audit without these tools (the developer's choice, with the date): <tool names, or "none">
 ```
 
 ---
@@ -118,7 +119,7 @@ Write `code-health-report.md` in the current run's folder (`.audit/runs/<run-id>
 - **Threat Model:** trust boundaries (where untrusted data enters) and assets (what is worth stealing or breaking).
 - **Context Verification:** each developer-supplied claim marked verified, false, or unverifiable.
 - **Applicability Map:** items that apply, items Not Applicable (with reasons, by ID), conditional sections that apply, project-specific hypotheses added, stack reference files loaded.
-- **Evidence Baseline:** the evidence script summary (tools run, tools missing, tools skipped and why, key counts). Tools that would help but are not installed are listed as recommendations; never install them during reconnaissance.
+- **Evidence Baseline:** the evidence script summary (tools run, tools missing, tools skipped and why, key counts). Each tool that is not installed is listed with the checklist items it leaves unproven and how to get it, plus whether the developer chose to audit without it; never install one during reconnaissance.
 - **Baseline Checks:** build, type check, lint and test commands that were safe to run, with results. Separate pre-existing failures from audit limitations, and list commands skipped for isolation reasons.
 
 ## 2. Verified Safeguards
@@ -207,7 +208,7 @@ When the audit is complete, show this in the conversation, in this order. It is 
    The row above is a format example only. "What is wrong" is one plain sentence a developer outside the project would understand. "Evidence" names the kind of proof and its key fact: the tool and what it reported, the trace's source and sink, the failing test, or the measurement.
 4. **Not proven yet:** every Probable and Unverified item, with its ID, what was seen, and the step that would settle it.
 5. **Waiting on you:** every Decision Needed and every question only the developer can answer, each with the choice or fact needed. Then **your earlier decisions**, as the table from section 4: each one with what the code says now, any conflict with another decision, and a keep or reconsider recommendation, Reconsider and conflicts first.
-6. **Not checked:** any files or areas that were not examined and why, tools that were missing or skipped, checks that did not happen, and technologies checked only against the general checklists.
+6. **Not checked:** any files or areas that were not examined and why; each tool that was missing or skipped, with the checklist items it left unproven and how to get it (from the evidence summary); checks that did not happen; and technologies checked only against the general checklists.
 7. **Where the full report is:** the path to `code-health-report.md`, and one line saying that nothing has been changed and nothing will be planned or fixed until they ask.
 
 Record the date in the Progress section ("Full report presented"). If the conversation ends before the developer has seen it, present it again when they next run `/codedetective`.

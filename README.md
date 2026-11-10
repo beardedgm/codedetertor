@@ -11,6 +11,7 @@ The goal is what an experienced lead developer would call good clean code: secur
 ## Contents
 
 - [Install](#install)
+- [What it needs](#what-it-needs)
 - [Quick start](#quick-start)
 - [Commands](#commands)
 - [How an audit runs](#how-an-audit-runs)
@@ -22,9 +23,9 @@ The goal is what an experienced lead developer would call good clean code: secur
 - [How fixes work](#how-fixes-work)
 - [Safety guarantees](#safety-guarantees)
 - [Files it creates in your project](#files-it-creates-in-your-project)
-- [Recommended analyzers](#recommended-analyzers)
+- [How the analyzers behave](#how-the-analyzers-behave)
 - [Repository layout](#repository-layout)
-- [Requirements](#requirements)
+- [Using it outside Claude Code](#using-it-outside-claude-code)
 
 ## Install
 
@@ -62,15 +63,43 @@ git clone https://github.com/beardedgm/codedetertor.git "$env:USERPROFILE\.claud
 
 To update a cloned install, run `git pull` inside that folder.
 
+## What it needs
+
+**Required:** Claude Code, Node.js (for the two bundled scripts), and git (the project should be a git repository).
+
+**Analyzers.** The audit proves its findings with tools installed in your project or on your computer. It never installs anything itself. Each tool it cannot find leaves some checks unproven:
+
+| Tool | What it proves | How to get it |
+|---|---|---|
+| `typescript` (tsc) | Type errors. Needs a `tsconfig.json` or `jsconfig.json`; `checkJs` covers plain JavaScript. | Dev dependency |
+| `eslint` | Lint health, and function complexity if a complexity rule such as `eslint-plugin-sonarjs` is enabled. Needs an ESLint config. | Dev dependency |
+| `knip` | Dead code and unused dependencies | Dev dependency |
+| `madge` | Circular imports | Dev dependency |
+| `jscpd` | Duplicated code | Dev dependency |
+| `gitleaks` | Secrets in the repository and its history | Separate program on your PATH |
+| `npm audit` or `pnpm audit` | Known vulnerabilities in dependencies | Comes with npm or pnpm. Runs only if you allow network tools. |
+| `osv-scanner` | Known vulnerabilities in dependencies. Optional when `npm audit` or `pnpm audit` covers the project. | Separate program on your PATH. Runs only if you allow network tools. |
+
+```bash
+npm install --save-dev typescript eslint knip madge jscpd
+```
+
+For React projects, also enable `eslint-plugin-react-hooks` (recommended preset). `gitleaks` and `osv-scanner` are installed on their own: on Windows `winget install -e --id Gitleaks.Gitleaks` and `winget install Google.OSVScanner`, on macOS `brew install gitleaks osv-scanner`. Projects in other languages use that language's own tools, listed in `references/tools-by-language.md`.
+
+**What happens without them.** The audit still runs, and it stays honest: a check whose tool is missing is reported as Unverified, never as passed. But it is no longer the full check. Security findings still hold up, because most are proven by tracing the code. Most measured code quality checks (complexity, duplication, dead code, circular imports, type errors, lint health) cannot be proven, and the verdict cannot reach "Standard met".
+
+**It tells you before it starts.** Every new audit begins by showing which tools are installed, which are missing, what the audit cannot prove without each one, and the command to install it. You choose to stop and install them, or to continue without them. The final report names each missing tool again, with the checks it left unproven.
+
 ## Quick start
 
 1. Open Claude Code in the repository you want to audit.
 2. Optionally create `.audit/context.md` describing your stack and anything that must never be touched (template in `references/report-template.md`). Five lines here noticeably sharpen the audit.
-3. Run `/codedetective`. It profiles the project, gathers tool evidence, and runs all four passes without stopping. It pauses only if it has a question it cannot continue without.
-4. Read the full report it shows at the end: every P0, P1 and P2, with what is wrong, where, and the evidence. The same report, with full detail, is saved in `.audit/runs/<date>/code-health-report.md`.
-5. Make your decisions: correct anything it got wrong, answer its open questions, and say which findings you accept as they are.
-6. Run `/codedetective plan` to plan the fixes. Nothing is planned or fixed before this point.
-7. Approve the plan, then run `/codedetective fix` to build one fix at a time, reviewing each.
+3. Run `/codedetective`. It first shows which analyzers are installed and which are missing, and what the audit cannot prove without each one. Install what you want and run it again, or tell it to continue.
+4. It then profiles the project, gathers tool evidence, and runs all four passes without stopping. It pauses only if it has a question it cannot continue without.
+5. Read the full report it shows at the end: every P0, P1 and P2, with what is wrong, where, and the evidence. The same report, with full detail, is saved in `.audit/runs/<date>/code-health-report.md`.
+6. Make your decisions: correct anything it got wrong, answer its open questions, and say which findings you accept as they are.
+7. Run `/codedetective plan` to plan the fixes. Nothing is planned or fixed before this point.
+8. Approve the plan, then run `/codedetective fix` to build one fix at a time, reviewing each.
 
 ## Commands
 
@@ -282,15 +311,9 @@ It never adds a dependency without your approval, and never commits, pushes, dep
 | `.audit/accepted.md` | Items you accepted, with your reasons. Honoured by later audits. |
 | `.audit/context.md` | Optional. Your project context, written by you. |
 
-## Recommended analyzers
+## How the analyzers behave
 
-The evidence script runs only tools already installed in your project or on your PATH, and lists anything missing. For the fullest evidence, add these as dev dependencies:
-
-```bash
-npm install --save-dev typescript eslint knip madge jscpd
-```
-
-For React projects, also enable `eslint-plugin-react-hooks` (recommended preset) and `eslint-plugin-sonarjs` for complexity. Install `gitleaks` separately for secret scanning.
+The tools themselves are listed under [What it needs](#what-it-needs). The evidence script runs only the ones already installed in your project or on your PATH.
 
 Tools that send data to public vulnerability databases (`npm audit`, `pnpm audit`, `osv-scanner`) run only if you agree. The audit asks once and remembers your answer in `.audit/context.md`. If you say no, the known-vulnerability check (SEC-19) stays Unverified.
 
@@ -324,9 +347,6 @@ scripts/
   check-diff.mjs                Rejects fixes that weaken tests or add suppressions
 ```
 
-## Requirements
-
-- Claude Code.
-- Node.js, for the two bundled scripts.
+## Using it outside Claude Code
 
 The `argument-hint` and `disable-model-invocation` lines in the `SKILL.md` frontmatter are Claude Code features. The second one means the skill runs only when you type `/codedetective`, never on its own. If you load the skill somewhere that rejects those fields, delete those two lines.
