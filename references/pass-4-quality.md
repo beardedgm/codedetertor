@@ -2,29 +2,31 @@
 
 This pass measures the code against the clean code definition in SKILL.md. Split everything into two kinds of finding, because they deserve different levels of trust. Cite the item's ID in every finding, task and plan.
 
+The Source column, and the tag in brackets after each judgment criterion, names the recognized source behind the item. `references/sources.md` says what each tag is and where to look it up; cite it in the task's `STANDARD` field.
+
 ## Checkable criteria (tool evidence; may be Confirmed)
 
-| ID | Criterion | Evidence |
-|---|---|---|
-| QUAL-01 | Function understandability | Cognitive complexity above 15 per function, if the project's linter reports it. Otherwise note it as a missing tool rather than estimating by eye. |
-| QUAL-02 | Duplication | Cloned blocks across production files from the duplication output (test files and fixtures are excluded, since repeated setup there is normal). A clone counts when the copies would have to change together; similar-looking code that changes for different reasons does not. |
-| QUAL-03 | Dead code | Unused files, exports and dependencies from the dead code output. Verify each before queueing; dynamic imports, framework conventions and a published package's public API cause false positives. |
-| QUAL-04 | Coupling | Circular imports. |
-| QUAL-05 | Type rigor | Type checker errors (shared with Pass 3). |
-| QUAL-06 | Suppression debt | Lint and type suppressions, test skips and focus markers, with locations. A suppression with a written reason that still holds is Passed; one with no reason, or a reason that no longer holds, is a finding. `@ts-ignore`, `@ts-nocheck`, committed focus markers and unexplained skips are always findings. |
-| QUAL-07 | Error swallowing | Empty `catch` blocks, and `catch` blocks that only log and continue, prioritized on auth, payment and data-write paths. |
-| QUAL-08 | Consistency | More than one library or pattern doing the same job (two HTTP clients, two validation libraries, two date libraries, two state approaches). |
-| QUAL-09 | Outdated API usage | Patterns from older major versions of frameworks actually in use (see the stack reference files): removed APIs, compatibility shims the current version makes unnecessary, deprecated options. |
-| QUAL-10 | Lint health | Rule violations from the project's own configured linter, and rules the framework recommends that the project has turned off without a recorded reason. |
+| ID | Criterion | Evidence | Source |
+|---|---|---|---|
+| QUAL-01 | Function understandability | Cognitive complexity above 15 per function, if the project's linter reports it. Otherwise note it as a missing tool rather than estimating by eye. | Sonar Cognitive Complexity; CWE-1121 |
+| QUAL-02 | Duplication | Cloned blocks across production files from the duplication output (test files and fixtures are excluded, since repeated setup there is normal). A clone counts when the copies would have to change together; similar-looking code that changes for different reasons does not. | CWE-1041; DRY |
+| QUAL-03 | Dead code | Unused files, exports and dependencies from the dead code output. Verify each before queueing; dynamic imports, framework conventions and a published package's public API cause false positives. | CWE-561 |
+| QUAL-04 | Coupling | Circular imports. | CWE-1047 |
+| QUAL-05 | Type rigor | Type checker errors (shared with Pass 3). | TypeScript strict; CWE-704 |
+| QUAL-06 | Suppression debt | Lint and type suppressions, test skips and focus markers, with locations. A suppression with a written reason that still holds is Passed; one with no reason, or a reason that no longer holds, is a finding. `@ts-ignore`, `@ts-nocheck`, committed focus markers and unexplained skips are always findings. | ban-ts-comment |
+| QUAL-07 | Error swallowing | Empty `catch` blocks, and `catch` blocks that only log and continue, prioritized on auth, payment and data-write paths. | CWE-390, CWE-1069 |
+| QUAL-08 | Consistency | More than one library or pattern doing the same job (two HTTP clients, two validation libraries, two date libraries, two state approaches). | DRY (closest match) |
+| QUAL-09 | Outdated API usage | Patterns from older major versions of frameworks actually in use (see the stack reference files): removed APIs, compatibility shims the current version makes unnecessary, deprecated options. | CWE-477 |
+| QUAL-10 | Lint health | Rule violations from the project's own configured linter, and rules the framework recommends that the project has turned off without a recorded reason. | Project linter |
 
 ## Judgment criteria (advisory only; never P0 or P1)
 
-- **QUAL-11 Design fit:** does the code belong where it is, and does it follow the patterns the rest of the system uses?
-- **QUAL-12 Module depth:** does the interface stay small relative to what it hides? Many tiny shallow wrappers increase total complexity. Splitting a function is an improvement only when the extracted piece has a meaningful name, a cohesive purpose, and callers that no longer need to know its internals.
-- **QUAL-13 Over-engineering:** abstractions with one implementation, configuration nobody sets, factory layers for a single type, defensive checks on values that cannot be null.
-- **QUAL-14 Naming** beyond what a linter can check.
-- **QUAL-15 Comment value:** a comment should explain why the code exists, not restate what it does. A comment explaining confusing code usually means the code should be simpler.
-- **QUAL-16 Simplicity over cleverness.**
+- **QUAL-11 Design fit:** does the code belong where it is, and does it follow the patterns the rest of the system uses? [Google review guide: Design]
+- **QUAL-12 Module depth:** does the interface stay small relative to what it hides? Many tiny shallow wrappers increase total complexity. Splitting a function is an improvement only when the extracted piece has a meaningful name, a cohesive purpose, and callers that no longer need to know its internals. [Ousterhout]
+- **QUAL-13 Over-engineering:** abstractions with one implementation, configuration nobody sets, factory layers for a single type, defensive checks on values that cannot be null. [Google review guide: Complexity; YAGNI]
+- **QUAL-14 Naming** beyond what a linter can check. [Google review guide: Naming]
+- **QUAL-15 Comment value:** a comment should explain why the code exists, not restate what it does. A comment explaining confusing code usually means the code should be simpler. [Google review guide: Comments]
+- **QUAL-16 Simplicity over cleverness.** [Google review guide: Complexity]
 
 For every judgment finding, state the concrete simpler alternative and its rough diff size. If you cannot describe a simpler alternative, it is not a finding.
 

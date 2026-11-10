@@ -184,7 +184,7 @@ PROGRESS: <Queued | Planned | In progress | Done | Blocked: reason>
 PLAN: <plans/<file>.md in the run folder once a plan is approved, or "none">
 CHECK_ID: <Checklist ID, e.g. SEC-03, or PROJ-NN for a project-specific finding>
 SUBSYSTEM: <Comma-separated list of affected areas>
-STANDARD: <OWASP Top 10:2025 category and ASVS 5.0 chapter for security findings, or "n/a">
+STANDARD: <Security: OWASP Top 10:2025 category and ASVS 5.0 chapter. Others: the source tag on the checklist item (a CWE ID or named practice from sources.md). PROJ-NN: the closest source, or "none">
 TARGET_SYMBOLS:
   - <path/to/file :: functionOrClassSymbol (Lstart-Lend)>
 EVIDENCE:

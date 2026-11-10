@@ -2,19 +2,21 @@
 
 Every item is a hypothesis. Cite the item's ID in every finding, task and plan. Prefer tool evidence from the run's `evidence/` folder over reading code by eye. Apply the stack reference files Phase 0 selected.
 
-**ARCH-01 Module Boundaries**
+The tag in brackets after each item names the recognized source behind it. `references/sources.md` says what each tag is and where to look it up; cite it in the task's `STANDARD` field.
+
+**ARCH-01 Module Boundaries** [CWE-1047, CWE-1054, CWE-1057]
 Documented boundaries hold: shared code free of runtime-specific APIs, no forbidden cross-layer imports, no circular dependencies (see the circular import output).
 
-**ARCH-02 Contract Symmetry**
+**ARCH-02 Contract Symmetry** [CWE-602]
 Verify that producers and consumers agree on payload shapes, saved formats, normalization and shared constraints. Every receiving trust boundary must independently enforce the checks required to protect it; client validation cannot substitute for server enforcement. Distinguish accidental contract drift from intentional differences such as server-only authorization, ownership, quotas and state-dependent validation. Shared shapes are ideally defined once and imported by both sides.
 
-**ARCH-03 Type Rigor**
+**ARCH-03 Type Rigor** [TypeScript strict; CWE-704; ban-ts-comment]
 Results of the project's type checker. Implicit `any`, unchecked casts, untyped boundaries, loose types in core business logic, and the count and location of type suppression comments (see the suppression output). A whole-file type check opt-out is a finding.
 
-**ARCH-04 Configuration**
+**ARCH-04 Configuration** [Twelve-Factor III; CWE-1051]
 Configuration loaded through one validated module at startup. Undocumented differences across environments, required variables with no validation, and defaults unsafe in production.
 
-**ARCH-05 Test Integrity**
+**ARCH-05 Test Integrity** [Fowler: Non-Determinism; Fowler: Test Coverage]
 - Tests are isolated: state resets between tests, no ordering dependence, separate accounts or records where tests mutate server state.
 - External services are faked; tests run only against local or ephemeral environments.
 - Critical paths found in Pass 1 have coverage.
@@ -23,5 +25,5 @@ Configuration loaded through one validated module at startup. Undocumented diffe
 - Committed skips and focus markers (see the suppression output).
 - Any CI test-selection logic triggers the right tests when shared code changes.
 
-**ARCH-06 Observability**
+**ARCH-06 Observability** [Google SRE ch. 6]
 Whether a failure in a critical path would actually be noticed: logging, metrics, alerts, error tracking, and a health check that verifies real dependencies rather than returning a static success.
