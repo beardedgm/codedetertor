@@ -1,8 +1,10 @@
 # codedetective
 
-A Claude Code skill that gives a codebase a full checkup, then fixes what it finds, one small reviewed change at a time.
+A Claude Code skill that holds a codebase to a fixed, published standard: it audits the whole repository, proves each problem before raising it, fixes what fails one small approved change at a time, and tells you plainly when the standard is met.
 
-Think of it as a home inspection before a renovation. The agent walks through the whole repository looking for security holes, data integrity risks, slow paths, architectural drift, weak tests and messy code. It does not touch anything while it looks. It writes everything into a report, sorts each finding by how well it can be proven, and builds an ordered to-do list of fixes. Fixing starts only when you ask. Every fix is planned in Claude Code's plan mode and approved by you before any code changes, and it stops for your review after every single fix.
+Think of it as a building inspector who also does the repairs. It checks security, data integrity, performance, architecture, tests and code quality against named standards (OWASP, CWE and each framework's own documentation), never against an AI's taste. It touches nothing while it inspects. Fixing starts only when you ask, every fix is planned and approved by you first, and it stops for your review after each one. When nothing is left that fails the standard, it says so and stops instead of inventing work.
+
+**Best for:** JavaScript and TypeScript web apps. It goes deepest on Node, Express, React, Vite, MongoDB with Mongoose, Cloudflare R2, Render and Playwright. Other stacks get the full general checklists, and the report says where depth is missing.
 
 The goal is what an experienced lead developer would call good clean code: secure, easy to understand, consistent, following current best practice for the versions the project actually uses, and with tests you can trust.
 
@@ -161,7 +163,15 @@ Tasks are prioritized by real consequence:
 
 ## The verdict: reaching the standard
 
-The goal is to fix the codebase until it meets a fixed standard, then stop. The checklists are a finite set of industry standards and best practices (OWASP Top 10:2025, ASVS 5.0, and current practice for your stack). They are about how the code is built, never about what you build, and a codebase can fully meet them. Each audit and fix round should leave fewer findings, until nothing is left that would add stability, security, correctness, performance or maintainability.
+The goal is to fix the codebase until it meets a fixed standard, then stop. The checklists are a finite set of industry standards and best practices. They are about how the code is built, never about what you build, and a codebase can fully meet them. Each audit and fix round should leave fewer findings, until nothing is left that would add stability, security, correctness, performance or maintainability.
+
+Every rule names where it comes from, so you can check that it is a recognized standard and not the AI's taste:
+
+- **Security:** OWASP Top 10:2025 and ASVS 5.0, plus the OWASP lists for APIs and for AI features.
+- **Performance, architecture and code quality:** CWE, the public weakness catalog behind ISO/IEC 5055 (dead code, circular dependencies, swallowed errors, unreleased resources and more), and named published practices: Google's code review standard, SonarSource's Cognitive Complexity, The Twelve-Factor App, DRY and YAGNI, Martin Fowler on testing, and Google's SRE book.
+- **Your stack:** each framework's own official documentation and security advisories.
+
+Each checklist item carries its source as a short tag, and `references/sources.md` lists every tag with a link to look it up. The agent is told never to cite a standard it has not confirmed.
 
 Once the real work is done, the skill should say so instead of inventing work. Every finding has to name the checklist item it fails and the concrete benefit of fixing it, and a change that only rewords, reshuffles or restyles code doesn't qualify. A run that finds nothing is treated as a successful audit, and the skill is told never to lower its evidence bar or hunt for marginal issues to avoid an empty report.
 
@@ -294,6 +304,7 @@ references/
   stack-mongoose.md
   stack-r2-render.md
   stack-playwright-jsdoc.md
+  sources.md                    The standard behind each rule, with lookup links
   tools-by-language.md          Read-only tools for Python, Go, Rust, Ruby, PHP, Java
   report-template.md            Report structure, task format, context template
 scripts/
