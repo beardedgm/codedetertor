@@ -1,8 +1,10 @@
 # codedetective
 
-A Claude Code skill that gives a codebase a full checkup, then fixes what it finds, one small reviewed change at a time.
+A Claude Code skill that holds a codebase to a fixed, published standard: it audits the whole repository, proves each problem before raising it, fixes what fails one small approved change at a time, and tells you plainly when the standard is met.
 
-Think of it as a home inspection before a renovation. The agent walks through the whole repository looking for security holes, data integrity risks, slow paths, architectural drift, weak tests and messy code. It does not touch anything while it looks. It writes everything into a report, sorts each finding by how well it can be proven, and builds an ordered to-do list of fixes. Fixing starts only when you ask. Every fix is planned in Claude Code's plan mode and approved by you before any code changes, and it stops for your review after every single fix.
+Think of it as a building inspector who also does the repairs. It checks security, data integrity, performance, architecture, tests and code quality against named standards (OWASP, CWE and each framework's own documentation), never against an AI's taste. It touches nothing while it inspects. Fixing starts only when you ask, every fix is planned and approved by you first, and it stops for your review after each one. When nothing is left that fails the standard, it says so and stops instead of inventing work.
+
+**Best for:** JavaScript and TypeScript web apps. It goes deepest on Node, Express, React, Vite, MongoDB with Mongoose, Cloudflare R2, Render and Playwright. Other stacks get the full general checklists, and the report says where depth is missing.
 
 The goal is what an experienced lead developer would call good clean code: secure, easy to understand, consistent, following current best practice for the versions the project actually uses, and with tests you can trust.
 
