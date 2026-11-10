@@ -14,11 +14,10 @@ The goal is what an experienced lead developer would call good clean code: secur
 - [Quick start](#quick-start)
 - [Commands](#commands)
 - [How an audit runs](#how-an-audit-runs)
-- [What to do at the Pass 1 stop](#what-to-do-at-the-pass-1-stop)
 - [Audit history](#audit-history)
+- [When the audit finishes](#when-the-audit-finishes)
 - [How findings are judged](#how-findings-are-judged)
 - [The verdict: reaching the standard](#the-verdict-reaching-the-standard)
-- [When the report is finished](#when-the-report-is-finished)
 - [How planning works](#how-planning-works)
 - [How fixes work](#how-fixes-work)
 - [Safety guarantees](#safety-guarantees)
@@ -67,11 +66,11 @@ To update a cloned install, run `git pull` inside that folder.
 
 1. Open Claude Code in the repository you want to audit.
 2. Optionally create `.audit/context.md` describing your stack and anything that must never be touched (template in `references/report-template.md`). Five lines here noticeably sharpen the audit.
-3. Run `/codedetective`. It profiles the project, gathers tool evidence, runs the security pass, and stops.
-4. Review the Pass 1 summary (see below), then run `/codedetective` again to continue through Passes 2 to 4.
-5. Read the finished report in `.audit/runs/<date>/code-health-report.md`. It ends by offering to fix the next task, plan a batch, or stop.
-6. Run `/codedetective plan` to plan all P0 fixes together, or `/codedetective fix` to plan and fix the top task on its own.
-7. Approve the plan, review the finished fix, then run `/codedetective fix` for the next one.
+3. Run `/codedetective`. It profiles the project, gathers tool evidence, and runs all four passes without stopping. It pauses only if it has a question it cannot continue without.
+4. Read the full report it shows at the end: every P0, P1 and P2, with what is wrong, where, and the evidence. The same report, with full detail, is saved in `.audit/runs/<date>/code-health-report.md`.
+5. Make your decisions: correct anything it got wrong, answer its open questions, and say which findings you accept as they are.
+6. Run `/codedetective plan` to plan the fixes. Nothing is planned or fixed before this point.
+7. Approve the plan, then run `/codedetective fix` to build one fix at a time, reviewing each.
 
 ## Commands
 
@@ -87,17 +86,19 @@ To update a cloned install, run `git pull` inside that folder.
 | `/codedetective fix batch <name>` | Builds every task in an approved batch plan back to back, P2 cleanup only, with one review at the end. Stops at the first problem. |
 | `/codedetective status` | Reports the verdict, progress and counts, and lists past audits with their verdicts. Changes nothing. |
 
-Only `fix` ever changes your code, and only after you approve its plan. `plan` never edits anything. Running `/codedetective` on a finished audit that still has open fixes shows where things stand and asks what's next, rather than starting a new audit over your queue. Once nothing is left to fix, it starts a fresh audit to confirm the standard is met.
+Only `fix` ever changes your code, and only after you approve its plan. `plan` never edits anything. Both work only on a finished audit: if the audit is still running or paused, they say so and offer to continue it. Running `/codedetective` on a finished audit that still has open fixes shows where things stand and asks what's next, rather than starting a new audit over your queue. Once nothing is left to fix, it starts a fresh audit to confirm the standard is met.
 
 ## How an audit runs
 
 | Step | What it covers |
 |---|---|
 | **Phase 0: Discovery** | Exact versions of your runtime and frameworks, entry points, data flows, external services, and a run of the analyzers already installed in your project. Writes a short threat model: where untrusted data enters, and what is worth stealing or breaking. Decides which checklist items and stack references apply. |
-| **Pass 1: Security** | Authentication, authorization and tenant isolation, injection, XSS, file uploads, imports, secrets, account deletion, error handling that fails open, logging, rate limits, concurrency, and supply chain. Adds AI and LLM checks (prompt injection, model output, key handling, spend limits) and payment checks (server-side pricing, webhook replay, entitlements) when the app has those features. Aligned to OWASP Top 10:2025 and ASVS 5.0. **Stops here for your review.** |
+| **Pass 1: Security** | Authentication, authorization and tenant isolation, injection, XSS, file uploads, imports, secrets, account deletion, error handling that fails open, logging, rate limits, concurrency, and supply chain. Adds AI and LLM checks (prompt injection, model output, key handling, spend limits) and payment checks (server-side pricing, webhook replay, entitlements) when the app has those features. Aligned to OWASP Top 10:2025 and ASVS 5.0. |
 | **Pass 2: Performance** | Measured hot paths, blocking work on the event loop, database access patterns, frontend rendering and bundles, long sessions, cleanup, and graceful shutdown. |
 | **Pass 3: Architecture** | Module boundaries, client and server contracts, type rigor, configuration, test integrity, and observability. |
 | **Pass 4: Code quality** | Complexity, duplication, dead code, suppressions, swallowed errors, inconsistent patterns, outdated framework APIs, and patterns typical of AI-generated code. |
+
+All four passes run in one go. The audit pauses only for a question it cannot continue without, and it never offers to plan or fix anything along the way. However serious a finding is, it waits for the full report, where it is listed first.
 
 Stack-specific checks load automatically when Phase 0 detects them: Node.js and Express 5, React 19 and Vite, Mongoose and MongoDB, Cloudflare R2 and Render, and Playwright with JSDoc type checking. Each check has its own ID (such as `EXP-02` or `MONGO-01`) and counts toward the verdict like any checklist item.
 
@@ -112,29 +113,42 @@ Everything is appended to the report after each phase, so an interrupted audit p
 
 Every audit is a separate run in its own dated folder under `.audit/runs/`, so a new audit always starts fresh and earlier ones stay as history.
 
-- **Resuming.** Running `/codedetective` again continues an audit that hasn't finished, such as one paused at the Pass 1 review. If that audit is more than 3 days old or the code has changed since it started, it asks whether to resume or start over.
+- **Resuming.** Running `/codedetective` again continues an audit that hasn't finished, such as one that was interrupted or paused for a question. If that audit is more than 3 days old or the code has changed since it started, it asks whether to resume or start over.
 - **Starting fresh.** Once an audit is complete and nothing is left to fix, the next `/codedetective` starts a new one. If fixes are still open, it asks first instead of replacing your queue. `/codedetective new` starts a new one any time.
 - **Comparing.** A new audit compares itself with the previous one by checklist ID: what was fixed, what is still open, what is new, and anything that came back after being fixed. Regressions are flagged and ranked first within their priority. Nothing is copied over: every finding is re-verified against today's code.
-- **Fixing.** `fix`, `plan` and `status` work on the current audit's queue, even across several days.
+- **Fixing.** Once the audit is finished, `plan` and `fix` work on its queue, even across several days. `status` works at any time.
 - **Older files.** If `.audit/` holds files from before runs existed, they are moved into a `legacy` run folder automatically before anything else happens.
 - **Older report formats.** If a run's report was started by an earlier version of the skill, it's upgraded once, in place, when you next resume it: missing sections like the verdict and the coverage table are added from what the report already recorded, without redoing finished passes. Anything the old report never recorded is marked unverified rather than guessed, and it offers to re-run just that pass.
 - **Shared across audits.** `context.md` and `false-positives.md` stay at the top of `.audit/`, because they describe the project rather than one audit.
 
-## What to do at the Pass 1 stop
+## When the audit finishes
 
-The pause exists so you can check its work before it spends effort on the remaining passes.
+The audit ends by showing you the full report in the conversation, not a summary of it:
 
-1. **Read the summary.** It lists the most important confirmed findings and how many items landed in each tier.
-2. **Spot-check one confirmed finding.** Open the report, pick the scariest item, and look at the file and function it names. If the trace is real, you can trust the rest more. If it is wrong, say so now.
-3. **Settle what you already know.** Some unproven items you can answer from experience ("we only ever run one instance"). Tell it, and it confirms or dismisses them.
-4. **Correct its picture of the system** if the Phase 0 summary got your architecture wrong.
-5. **Choose what happens next.** The stop ends with a question offering these choices, each with a short reason based on what it found:
-   - **Continue to Pass 2.** Passes 2, 3 and 4 then run one after another without stopping, and the audit ends with its own set of choices.
-   - **Plan the P0 fixes now**, offered when Pass 1 found urgent tasks. Useful when they touch the same code.
-   - **Fix one P0 now**, offered when there is one.
-   - **Stop here.**
+- the verdict
+- every P0, P1 and P2 task, each with what is wrong, where it is, and the evidence that proves it
+- what it suspects but could not prove, and what would settle each one
+- the decisions and questions waiting on you
+- what it could not check, and why
 
-   Picking a choice is the same as typing the command, so you never need to remember the syntax. You can also reply with corrections instead, and it applies them before continuing. After a fix or plan made mid-audit, its stop question includes continuing the audit, so you can always get back to the remaining passes.
+The same report, with the full traces and tool output, is saved in `.audit/runs/<date>/code-health-report.md`.
+
+Then it stops. Nothing has been changed, and nothing is planned or fixed until you ask. If the verdict is Standard met, it says so and there is nothing to do. Otherwise it asks what you want next:
+
+1. **Stop so you can read it.** This is the default.
+2. **Go through the decisions.** It walks you through its open questions and the choices that are yours to make.
+3. **Plan the fixes.** It moves on to planning.
+
+Picking a choice is the same as typing the command, so you never need to remember the syntax.
+
+**What to do with the report**
+
+1. **Spot-check one confirmed finding.** Pick the scariest item and look at the file and function it names. If the trace is real, you can trust the rest more. If it is wrong, say so.
+2. **Correct it.** Tell it about any finding that is wrong, or anything it got wrong about your system. It re-checks the finding with what you told it and updates the report.
+3. **Settle what only you know.** Some items can't be proven from code ("we only ever run one instance", "alerts page me"). Your answer confirms or dismisses them.
+4. **Decide what you won't fix.** Anything you accept as it is gets recorded with your reason and leaves the queue.
+
+Planning covers only what is still in the queue after your decisions.
 
 ## How findings are judged
 
@@ -179,7 +193,7 @@ Every report opens with a verdict:
 
 | Verdict | Meaning |
 |---|---|
-| **Audit in progress (Pass N of 4)** | The audit hasn't finished, so no other verdict applies yet, even if every task found so far is fixed. |
+| **Audit in progress (Pass N of 4)** | The audit hasn't finished, so no other verdict applies yet. |
 | **Standard met** | Every applicable checklist item passed or doesn't apply, nothing went unchecked, no decisions are waiting on you, and nothing is left to fix. |
 | **Standard met, with gaps** | Nothing left to fix, but some items couldn't be checked or a decision is waiting on you. It lists exactly what stands between this and Standard met. |
 | **Fixes remaining** | Fixes remain, counted by priority. It also tells you when no P0 or P1 tasks remain, which is the first milestone. |
@@ -188,7 +202,7 @@ The verdict carries its evidence, for example: *"Standard met: 38 of 48 gated it
 
 Two outcomes exist so the finish line is always reachable:
 
-- **Confirmed by you.** Some things can't be proven from code at all: whether alerts actually reach a person, whether backups exist, a setting in your hosting dashboard. At the end of an audit it asks you about these in one grouped question. Your answer settles them, and the verdict names which ones rest on your word.
+- **Confirmed by you.** Some things can't be proven from code at all: whether alerts actually reach a person, whether backups exist, a setting in your hosting dashboard. The report lists them, and after you have seen it, it asks you about them in one grouped question. Your answer settles them, and the verdict names which ones rest on your word.
 - **Accepted by you.** When a fix depends on a business choice (how strict a rate limit should be), or a task can't be fixed without weakening tests or security, it becomes a decision for you. If you accept it with a reason, it's recorded in `.audit/accepted.md` and counts as settled.
 
 **Past decisions are re-evaluated, not obeyed.** A recorded decision is a note of what you chose and why, never an instruction to stay quiet. Later audits:
@@ -206,19 +220,11 @@ The same goes for the skill's own past conclusions: a finding it once ruled a fa
 - **The verdict has a date.** It applies to the audited commit. New code, a newly published vulnerability in a package you use, or a new edition of a standard can change it, which is what the next audit is for.
 - **It is not a proof of zero bugs.** No tool or reviewer can prove that. It shows every item in the standard was checked and passed.
 
-## When the report is finished
-
-After Pass 4, it leads with the verdict. If the verdict is Standard met, it says so and stops; there is nothing to fix. Otherwise it asks what you want next:
-
-1. **Fix the next task.** It plans the top task, you approve, and it builds that one fix.
-2. **Plan a batch.** It plans all the P0 tasks (or another tier you name) together. It recommends this when there are several urgent tasks, because seeing them side by side catches fixes that touch the same code.
-3. **Stop here.** You read the report on your own time and come back with `fix` or `plan` later.
-
 ## How planning works
 
-No code changes until you approve a plan. Plans use Claude Code's plan mode, which is read-only: Claude asks to switch into it, reads the current code, writes the plan, and submits it for your approval. If you'd rather not switch modes, it shows the same plan in the conversation and waits for your go-ahead.
+Planning starts only after the audit is finished and you have seen the full report. If decisions that affect a fix are still open, it asks you those first. No code changes until you approve a plan. Plans use Claude Code's plan mode, which is read-only: Claude asks to switch into it, reads the current code, writes the plan, and submits it for your approval. If you'd rather not switch modes, it shows the same plan in the conversation and waits for your go-ahead.
 
-Every plan names the files and functions it will change, what changes in each, the regression test it will write, how it will verify the fix, and the risk. It also says where the current code forced it to differ from the report. Approved plans are saved in `.audit/plans/`, so they survive between sessions.
+Every plan names the files and functions it will change, what changes in each, the regression test it will write, how it will verify the fix, and the risk. It also says where the current code forced it to differ from the report. Approved plans are saved in the audit's own `plans/` folder, so they survive between sessions.
 
 **One task at a time.** `/codedetective fix` plans the task, waits for your approval, then builds it.
 
@@ -251,6 +257,7 @@ It never adds a dependency without your approval, and never commits, pushes, dep
 
 ## Safety guarantees
 
+- **The full report comes first.** The audit runs all four passes and shows you everything it found before any fix is planned or offered. `plan` and `fix` refuse to run on an unfinished audit.
 - **Nothing changes without an approved plan.** Every fix is planned and approved before code is touched, and stops for review after.
 - **Read-only investigation.** No edits, installs, fixers, migrations or seeds during the audit. It writes only inside `.audit/`, which it hides from git through `.git/info/exclude`, and analyzers never count anything under `.audit/` as part of your code.
 - **Secrets stay hidden.** It checks configuration by variable name only and never prints values. Secret scan results report location and type, never the secret.

@@ -15,9 +15,13 @@ The target is what an experienced lead developer calls good clean code:
 
 The standard for every fix is improvement, not perfection: a good diff measurably improves code health and changes nothing else.
 
-The work has two stages:
-1. **Reconnaissance:** read-only investigation that produces a report in its own run folder under `.audit/runs/`.
-2. **Remediation:** executing that report's queue, one reviewed task at a time, only when the user explicitly asks. Every fix is planned and approved before any code changes.
+The work happens in a fixed order, and no step starts before the one before it is finished:
+1. **Audit (reconnaissance):** read-only investigation, Phase 0 and all four passes in one go, that produces a report in its own run folder under `.audit/runs/`.
+2. **Report and decisions:** the complete report is shown to the user: everything that is wrong and the evidence for it. The user reads it, corrects it and makes their decisions.
+3. **Planning:** fixes for what the user chose, planned for their approval. Still read-only.
+4. **Remediation:** building approved plans, one reviewed task at a time, only when the user explicitly asks.
+
+The promise that the audit changes no code only means something if the whole audit and its full report come first. Never plan a fix, start a fix, or offer either while an audit is unfinished.
 
 The report is the case file. It is how the work survives across sessions and context windows, so keep it current and always resume from it rather than from memory.
 
@@ -39,7 +43,7 @@ Every audit is a **run** with its own folder, so each new audit starts fresh and
       scratch/          measurement harnesses and other throwaway scripts
 ```
 
-The **current run** is the one named in `.audit/current-run`; if that file is missing, it is the newest folder under `.audit/runs/` that is not a legacy run. Paths in this skill and its references that say "the report", "evidence", "plans" or "scratch" mean those folders inside the current run. A run is **complete** when Pass 4 is written, **unfinished** before that, and **abandoned** if a new run was started while it was unfinished. Its status is recorded in its report's Progress section.
+The **current run** is the one named in `.audit/current-run`; if that file is missing, it is the newest folder under `.audit/runs/` that is not a legacy run. Paths in this skill and its references that say "the report", "evidence", "plans" or "scratch" mean those folders inside the current run. A run is **complete** when Phase 0 and all four passes are written, **unfinished** before that, and **abandoned** if a new run was started while it was unfinished. Its status is recorded in its report's Progress section.
 
 **Starting a run.** Create the folder, write its ID to `.audit/current-run`, and start at Phase 0. If an earlier complete run exists, it is the **previous run**: after Pass 4, compare against it (see "Since last audit" in `references/report-template.md`). Never copy findings or tasks from it; every finding in the new run is verified against today's code, and the comparison is matched by checklist ID and location.
 
@@ -49,16 +53,16 @@ The **current run** is the one named in `.audit/current-run`; if that file is mi
 
 | Invocation | Mode |
 |---|---|
-| `/codedetective` or `/codedetective start` | If the current run is unfinished, resume it where it stopped (a stale one gets a question first; see below). If the current run is complete but its queue still has open tasks, do not start a new audit: show its status and ask what to do next (fix the next task, plan a batch, start a new audit, or stop). If there are no runs, or the current run is complete with nothing left to fix, start a new run. |
+| `/codedetective` or `/codedetective start` | If the current run is unfinished, resume it where it stopped (a stale one gets a question first; see below). If the current run is complete but its full report has not been presented yet (the Progress section says so), present it now as described under "End of the audit". If the current run is complete but its queue still has open tasks, do not start a new audit: show its status and ask what to do next (go through the open decisions, plan fixes, fix the next task that has an approved plan, start a new audit, or stop). If there are no runs, or the current run is complete with nothing left to fix, start a new run. |
 | `/codedetective new` | Always start a new run. An unfinished current run is marked Abandoned and kept as history. |
-| `/codedetective pass <1-4>` | Run or rerun that pass only. |
-| `/codedetective plan <P0\|P1\|P2\|TASK-IDs>` | Plan a batch of tasks in plan mode, in priority and dependency order, for one approval. Read-only: changes no code. Defaults to all P0 tasks when no target is given. |
-| `/codedetective fix <TASK-ID>` | Plan that one task, get approval, then execute it. |
+| `/codedetective pass <1-4>` | Run or rerun that pass only, in the current run. It does not make a run complete: that takes all four passes. |
+| `/codedetective plan <P0\|P1\|P2\|TASK-IDs>` | Plan a batch of tasks in plan mode, in priority and dependency order, for one approval. Read-only: changes no code. Defaults to all P0 tasks when no target is given. Complete runs only. |
+| `/codedetective fix <TASK-ID>` | Plan that one task, get approval, then execute it. Complete runs only, like every `fix` form. |
 | `/codedetective fix` (no ID), or `next` | Plan and execute the next eligible task in queue order. |
 | `/codedetective fix batch <name>` | Build every task in an approved batch plan back to back, P2 tasks only, stopping at the first problem. See Batch fixing. |
 | `/codedetective status` | Summarize the current run's verdict, progress, counts by tier, and queue state, and list past runs with their verdicts. Change nothing. |
 
-`plan`, `fix` and `status` always work on the current run, including a run still mid-audit (for example a P0 found in Pass 1). Fixing a run's queue can take days; starting a new run makes the new one current, and the old queue stays in history.
+`status` works on the current run at any time. `plan` and `fix` work only on a complete run, because the developer is promised the whole audit and its full report before any change is discussed. If either is invoked while the current run is unfinished, change nothing: say the audit has to finish first and how far it has got, and ask whether to continue it. There is no override, including for a serious finding. Fixing a run's queue can take days; starting a new run makes the new one current, and the old queue stays in history.
 
 **Runs in an older report format.** Before resuming, fixing, planning or reporting status on a run, compare its report with the current structure in `references/report-template.md`. If it is missing sections (for example the verdict line, Decisions Needed, Since Last Audit or Checklist Coverage), add them once, in place, before doing anything else. Do not redo finished passes to do it:
 - Fill Checklist Coverage from what the report already records: findings and tasks become Finding, recorded safeguards become Passed, recorded not-applicable items become Not Applicable. Any gated item in a finished pass that the old report never recorded an outcome for becomes Unverified ("not recorded in this run's format"); never guess an outcome. Items in passes not yet run stay empty.
@@ -71,7 +75,7 @@ Say in one line that the report was upgraded. If the upgrade leaves items Unveri
 
 **Never strand a queue.** A new audit makes the new run current, and the old run's open tasks and approved plans become history. Only start one over open tasks when the user chooses it (`new`, or that option in the question).
 
-**Only `fix` (or `next`) ever starts remediation.** `plan` produces plans and never edits code. No other invocation authorizes changes to the codebase, including a no-argument resume after reconnaissance is complete. Invoking `/codedetective` again after a reconnaissance stop counts as approval to continue reconnaissance; it never counts as approval to fix. If arguments are ambiguous, state which mode you chose in one line and proceed.
+**Only `fix` (or `next`) ever starts remediation.** `plan` produces plans and never edits code. No other invocation authorizes changes to the codebase, including a no-argument resume after reconnaissance is complete. Invoking `/codedetective` again after a pause in the audit counts as approval to continue the audit; it never counts as approval to plan or fix. If arguments are ambiguous, state which mode you chose in one line and proceed.
 
 ## Before anything else
 
@@ -137,14 +141,14 @@ Every report opens with a verdict, so reaching the standard is stated plainly in
 | Decision Needed (waiting on the developer) | No |
 
 Verdict levels:
-- **Audit in progress (Pass N of 4):** until Pass 4 is written. Items in passes not yet run have no outcome, so no other verdict applies. Report the open task count by priority alongside it.
+- **Audit in progress (Pass N of 4):** until all four passes are written. Items in passes not yet run have no outcome, so no other verdict applies. Report the open task count by priority alongside it.
 - **Standard met:** the audit is complete, every gated item counts toward Standard met, and the queue has no open tasks. Advisory notes may remain.
 - **Standard met, with gaps:** the audit is complete and the queue is empty, but some items are Unverified or Decision Needed. List them; they are what stands between this and Standard met.
 - **Fixes remaining:** the audit is complete and open tasks remain. Give counts by priority, and say when no P0 or P1 tasks remain, because that is the first milestone.
 
 Write it as one line with the evidence behind it, for example: "Standard met: 38 of 48 gated items passed, 7 not applicable, 2 confirmed by developer (SEC-15, ARCH-06), 1 accepted and reconfirmed today (SEC-16), at commit abc123 on 2026-11-06." Recompute the verdict at the end of every pass and every fix.
 
-**Closing the gaps that code cannot.** Some items can never be proven from the repository: whether alerts reach a person, whether backups exist, a hosting dashboard setting. At the end of reconnaissance, ask the developer about each such Unverified item in one grouped question, saying exactly what would confirm it. Their answer makes it Confirmed by developer, or a Finding if they say it is missing. Never mark an item Confirmed by developer on your own inference. An Unverified item caused by a missing tool stays Unverified, and the summary names the tool that would check it.
+**Closing the gaps that code cannot.** Some items can never be proven from the repository: whether alerts reach a person, whether backups exist, a hosting dashboard setting. List each such Unverified item in the final report under Decisions Needed, saying exactly what would confirm it, and ask about them in one grouped question during the decision step, after the report has been presented. Their answer makes it Confirmed by developer, or a Finding if they say it is missing. Never mark an item Confirmed by developer on your own inference. An Unverified item caused by a missing tool stays Unverified, and the summary names the tool that would check it.
 
 **Blocked tasks become decisions.** A task that cannot pass without weakening security or tests is a Decision Needed: the developer either accepts it with a reason, or keeps it open for a different approach.
 
@@ -156,19 +160,17 @@ Write it as one line with the evidence behind it, for example: "Standard met: 38
 - **Reconfirm on a schedule.** At the start of each new audit (not on a resume), ask one grouped question listing every carried-forward decision with its date and reason, Reconsider recommendations first, so the developer can keep, reverse or review each. Include always: any item that would otherwise be P0 or P1, and any decision older than six months. If there is no answer, keep the decisions but mark them "carried forward, not reconfirmed".
 - **Show what rests on old decisions.** In the verdict and Checklist Coverage, separate Accepted items reconfirmed this audit from those carried forward unconfirmed.
 
-Only an audit can confirm **Standard met**. When fixing empties the queue of a complete audit, the verdict becomes "All findings fixed through commit `<hash>`; run `/codedetective new` to confirm the standard is met", because fixes change code the audit never saw. A fresh run that confirms nothing is what earns the verdict. Mid-audit, fixing every task found so far changes nothing: the verdict stays Audit in progress.
+Only an audit can confirm **Standard met**. When fixing empties the queue of a complete audit, the verdict becomes "All findings fixed through commit `<hash>`; run `/codedetective new` to confirm the standard is met", because fixes change code the audit never saw. A fresh run that confirms nothing is what earns the verdict.
 
 ## Reconnaissance phases
 
 Work in phases and append to the report after each, so progress survives if context runs out. For large repositories you may fan out read-only subagents to sweep and locate code, but a subagent's summary is a lead, not evidence; verify it before it gets a tier.
 
-**Stop after Pass 1.** Security findings are the ones most likely to change priorities, so the developer should see them before you spend effort on the rest. Give the summary, say where the audit stands ("Pass 1 of 4 done"), and end with a question, not a list of commands. Use a multiple-choice question when the tool is available, with a one-line reason under each option drawn from what you found:
-1. **Continue to Pass 2** (recommended unless something below is urgent).
-2. **Plan the P0 fixes now**, before finishing the audit. Offer this only when Pass 1 queued P0 tasks, and say if they touch the same code.
-3. **Fix one P0 now.** Offer this only when there is a P0, naming the one you would start with.
-4. **Stop here.**
+**The audit runs straight through.** Run Phase 0 and Passes 1 to 4 in one go, appending each to the report as it finishes. Do not stop between passes to summarize, and never offer to plan or fix anything before the audit is complete. The developer is promised the whole picture before any change is discussed, and a serious finding does not change that: it leads the final report. Pause only for one of these:
+- **A question you cannot answer from the repository and cannot continue without.** Ask it on its own, with no offers attached, then carry on. Anything that can wait (a business choice, a fact only the developer knows) is recorded as a Decision Needed or an Unverified item and asked after the report is presented.
+- **Context running low.** Stop cleanly at the end of the current pass, say which pass is next, and ask only whether to continue. Running `/codedetective` again resumes there.
 
-Also tell the user, in one line, that they can instead reply with corrections (a finding that is wrong, something they already know about the system), and you will apply them before continuing. Choosing an option counts as invoking that mode (`/codedetective`, `plan`, `fix`). Anything else, including silence, means stop. Without a multiple-choice tool, ask the same question in plain text.
+The setup questions asked before Phase 0 (network tools, a stale run, earlier decisions to reconfirm) are part of starting, not a pause in the audit.
 
 - **Phase 0: Discovery & Stack Profile.** Record exact versions of the runtime, frameworks, database driver or ODM, build tool and test runner. Map entry points, module boundaries, main data flows, and every external service with its per-environment configuration. Verify each developer-supplied claim. Run the evidence script. Write a short **Threat Model**: the trust boundaries (every place untrusted data enters, including uploads, webhooks, third-party responses and model output) and the assets worth stealing or breaking (accounts, personal data, payments, admin actions, paid API spend). Pass 1 works along these boundaries toward these assets. Then produce an **Applicability Map**: which checklist items apply, which do not, which conditional sections apply (AI and LLM features, payments), which project-specific hypotheses deserve extra scrutiny, and which stack reference files apply.
 - **Pass 1: Security, Authorization & Data Integrity.** Read `references/pass-1-security.md`.
@@ -185,18 +187,34 @@ Also tell the user, in one line, that they can instead reply with corrections (a
 
 Write the report using the structure and task schema in `references/report-template.md`.
 
-**Passes 2 to 4 run without stopping.** After Pass 1 is cleared, run Passes 2, 3 and 4 in one go, appending each to the report, unless the context runs low, in which case stop, say which pass is next, and ask whether to continue.
+**End of the audit: present the full report.** When Pass 4 is written, the run is complete. If there is a previous run, write the "Since last audit" comparison. Fill in Checklist Coverage and compute the verdict. Then show the report in the conversation, in full, using "Final report presentation" in `references/report-template.md`:
+1. The verdict line and the counts.
+2. **Every queued task**, grouped P0, then P1, then P2: its ID, what is wrong in plain words, where it is, and the evidence that proves it. Never cut the list down to highlights or "top findings"; the developer is deciding what to fix and needs all of it. Full traces and tool excerpts stay in the report file.
+3. Probable and Unverified items, each with what would settle it.
+4. Decisions Needed and the questions only the developer can answer.
+5. What was not checked, and why.
+6. The path to the report file.
 
-**End of reconnaissance.** When Pass 4 is written, the run is complete. If there is a previous run, write the "Since last audit" comparison. Fill in Checklist Coverage. Ask the grouped question about items only the developer can confirm (see Verdict), record the answers, then compute the verdict. Then give the summary, leading with the verdict. If the verdict is Standard met, say so plainly, offer only to stop or to review the advisory notes, and do not search further. Otherwise offer three choices, using a multiple-choice question if the tool is available:
-1. **Fix the next task:** plan the top eligible task, get approval, and build it.
-2. **Plan a batch:** plan all P0 tasks (or another tier or set the user names) together, for one approval. Recommend this when there are several P0 or P1 tasks, because seeing them together catches fixes that touch the same code.
-3. **Stop here:** leave the report for the user to read.
+Then stop. This is the developer's time to read and decide. Do not start planning or fixing, and do not recommend either. If the verdict is Standard met, say so plainly, offer only to stop or to review the advisory notes, and do not search further. Otherwise end with one question, multiple choice when available:
+1. **Stop here so I can read it** (the default).
+2. **Go through the decisions:** walk through the open questions and Decisions Needed.
+3. **Plan the fixes:** invoke `plan`.
 
-Choosing option 1 or 2 counts as invoking `fix` or `plan`. Anything else, including silence, means stop.
+Tell the user in one line that they can also reply with corrections. Choosing option 3 counts as invoking `plan`. Anything else, including silence, means stop. Fixing is never offered here; it is offered once a plan is approved.
+
+**The decision step.** After the report is presented and before any planning, the developer decides. Take what they bring in any order, and record each answer in the report (and in `.audit/accepted.md` or `.audit/false-positives.md` where it belongs):
+- **Corrections.** A finding they say is wrong, or a fact about the system you got wrong, goes back through the verifier with their information. The finding is then kept, changed, or moved to false positives with the reason.
+- **Questions only they can answer** (see "Closing the gaps that code cannot"), asked as one grouped question.
+- **Decisions Needed.** Each answer becomes a queued task or an Accepted item with their reason.
+- **Findings they choose not to fix.** Recorded as Accepted with their reason; the task leaves the queue.
+
+Recompute the verdict after their answers and say what changed. Planning covers only what is still in the queue.
 
 ## Planning
 
 Plans are where the user reviews a fix before any code changes, so a plan must be specific enough to approve or reject on its own: the files and symbols it will touch, what changes in each, the regression test, the verification commands, and the risk. A plan is not a restatement of the task; it is the task checked against the code as it is right now.
+
+**Planning comes after the report and the decisions.** Plan only on a complete run whose full report has been presented. Before writing a plan, check for open Decisions Needed or unanswered questions that affect the tasks being planned, and ask them first; a plan built on an unanswered decision is a guess. Leave out anything the developer accepted or corrected away.
 
 **Use Claude Code's plan mode.** Request it with the plan mode tool; the user approves the switch. In plan mode you can only read, so explore the current code, write the plan, and submit it for approval. If plan mode is unavailable or the user declines the switch, present the same plan in the conversation and wait for an explicit go-ahead. Either way, never edit code before a plan is approved.
 
@@ -208,7 +226,7 @@ Plans are where the user reviews a fix before any code changes, so a plan must b
 1. Select the tasks and add any unfinished prerequisites they depend on, marking which were pulled in.
 2. Order them by prerequisites first, then priority.
 3. Read the current code for every task, then write one plan: the build order, a short per-task plan, and a section on interactions between tasks (shared files or symbols, an order that matters, one fix that changes what another must do, combined risk).
-4. On approval, save it and mark every included task Planned. Then stop and ask, multiple choice when available: build the first task now, build the whole batch now (only when every task in it is P2; see Batch fixing), continue the audit at the next pass if it is unfinished, or stop. Approving a batch plan approves the approach, not the edits; each task is built in its own `fix` run with its own review stop, except a P2-only batch the user chooses to run with `fix batch`.
+4. On approval, save it and mark every included task Planned. Then stop and ask, multiple choice when available: build the first task now, build the whole batch now (only when every task in it is P2; see Batch fixing), or stop. Approving a batch plan approves the approach, not the edits; each task is built in its own `fix` run with its own review stop, except a P2-only batch the user chooses to run with `fix batch`.
 
 **Drift check before building a planned task.** Earlier fixes change the code a later plan was written against. Before building a task that already has an approved plan, re-read its targets and compare. The plan is still valid unless there is a material change: a target symbol moved, was renamed or was deleted; the approach no longer fits; the fix now needs files beyond the plan; the regression test cannot be written as planned; or a dependency would be added. With no material change, say in one line that the approved plan still holds and build it. With a material change, enter plan mode again for that task and get a fresh approval.
 
@@ -225,7 +243,7 @@ Plans are where the user reviews a fix before any code changes, so a plan must b
 9. Run the task's verification commands under the same isolation rules as reconnaissance.
 10. Run `node "${CLAUDE_SKILL_DIR}/scripts/check-diff.mjs" --base <snapshot ID>`, adding `--allow <file>` for each config file the approved plan names. It fails if this fix adds test skips or focus markers, a suppression comment without a written reason (`@ts-ignore` and `@ts-nocheck` always fail), disabled TLS checks, `--no-verify`, a deleted test file or a test moved out of the test paths, or an unplanned change to a config file that can switch checks off. It flags for review a suppression with a written reason, removed assertions, empty catch blocks and manifest changes; each needs a stated justification in the task. A failure means the fix is rejected: undo only this fix's offending change (never anything that was in the snapshot) and find a real fix, or stop and report the blocker.
 11. Rerun the evidence script with `--out .audit/runs/<run-id>/evidence/after-<TASK-ID> --compare <the previous evidence folder>`, so the baseline that findings cite is never overwritten, and record the change table in the task. A fix that makes a count worse needs a stated reason.
-12. Mark the task done in the report with its verification results, recompute the verdict, then stop and ask the user to review before the next task. When this was the last open task, say so and offer `/codedetective new` to confirm the standard is met. End with a question, multiple choice when available: fix the next task, and, if the run's audit is unfinished, continue the audit at the next pass; plus stop. Name the next task and the next pass in the options.
+12. Mark the task done in the report with its verification results, recompute the verdict, then stop and ask the user to review before the next task. When this was the last open task, say so and offer `/codedetective new` to confirm the standard is met. End with a question, multiple choice when available: fix the next task, or stop. Name the next task in the option.
 
 **Batch fixing (P2 only).** Hygiene work like dead exports or duplication can run to dozens of tasks, and a review stop after each costs more than it protects. `/codedetective fix batch <name>` builds every task in an approved batch plan back to back:
 - Only P2 tasks, under a batch plan the user approved. P0 and P1 tasks always get their own fix run and review stop.
@@ -240,4 +258,4 @@ Never commit, push, deploy or open a pull request unless the user asks for it.
 
 ## Talking to the user
 
-At each stop, give a short spoken-style summary: which run you are working in (and whether it is new or resumed), where the audit stands (for example "Pass 1 of 4 done"), the current verdict, what you examined, the most important Confirmed findings, how many items landed in each tier, any Decisions Needed that are waiting on the user, which tools were missing or skipped, and what comes next. Point to the report rather than pasting it. End every stop with a question offering the next steps, never just a list of commands to type. Say plainly what was not checked and why; the user needs to know the gaps as much as the findings.
+The end of the audit is the one stop that is not a summary: present the full report as described under "End of the audit". At every other stop, give a short spoken-style summary: which run you are working in (and whether it is new or resumed), where things stand (for example "Pass 2 of 4 done" at a pause, or the task just finished), the current verdict, what changed since the last stop, any Decisions Needed that are waiting on the user, and what comes next, pointing to the report file for detail. End every stop with a question offering the next steps, never just a list of commands to type. Say plainly what was not checked and why; the user needs to know the gaps as much as the findings.

@@ -7,6 +7,7 @@
 - Plan files (`plans/` in the run folder)
 - Report structure (`code-health-report.md` in the run folder)
 - Since last audit
+- Final report presentation (what is shown in the conversation when the audit ends)
 - Task schema
 - Progress tracking
 
@@ -100,10 +101,12 @@ Write `code-health-report.md` in the current run's folder (`.audit/runs/<run-id>
 - Status: <unfinished | complete | abandoned>
 - Previous run: <run-id, or "none">
 - Phase 0: <done | in progress | not started>
-- Pass 1: <...> (review stop: <pending | cleared>)
+- Pass 1: <...>
 - Pass 2: <...>
 - Pass 3: <...>
 - Pass 4: <...>
+- Full report presented: <date, or "not yet">
+- Decisions: <n waiting on the developer | all answered on date>
 - Remediation: <n of m tasks done; next eligible task ID>
 - Active batch plan: <plans/batch-<name>.md, tasks remaining | none>
 
@@ -165,6 +168,28 @@ Rows cover every gated checklist item, every non-advisory item of each loaded st
 
 ---
 
+## Final report presentation
+
+When the audit is complete, show this in the conversation, in this order. It is the whole picture the developer decides from, so list every queued task and never cut it down to highlights. Keep each row short; the full traces and tool excerpts stay in the report file.
+
+1. **Verdict:** the verdict line.
+2. **At a glance:** task counts by priority (P0, P1, P2), how many items are Probable or Unverified, how many decisions are waiting on the developer, how many advisory notes there are, and what was examined (the four passes and the stack references loaded).
+3. **P0 Critical**, then **P1 High**, then **P2 Hygiene:** one table for each, with every task in queue order. A priority with no tasks says "None".
+
+   | Task | What is wrong | Where | Evidence |
+   |---|---|---|---|
+   | P0-01 (SEC-03) | Any signed-in user can read another tenant's invoices | server/routes/invoices.js :: getInvoice | Trace: the request's ID reaches `Invoice.findById` with no owner check. Verifier could not refute it. |
+
+   The row above is a format example only. "What is wrong" is one plain sentence a developer outside the project would understand. "Evidence" names the kind of proof and its key fact: the tool and what it reported, the trace's source and sink, the failing test, or the measurement.
+4. **Not proven yet:** every Probable and Unverified item, with its ID, what was seen, and the step that would settle it.
+5. **Waiting on you:** every Decision Needed and every question only the developer can answer, each with the choice or fact needed.
+6. **Not checked:** tools that were missing or skipped, checks that did not happen, and technologies checked only against the general checklists.
+7. **Where the full report is:** the path to `code-health-report.md`, and one line saying that nothing has been changed and nothing will be planned or fixed until they ask.
+
+Record the date in the Progress section ("Full report presented"). If the conversation ends before the developer has seen it, present it again when they next run `/codedetective`.
+
+---
+
 ## Task schema
 
 Order tasks topologically: prerequisites (shared contracts, security boundaries) before the changes that depend on them. Keep each task to one reviewable diff, roughly a handful of files; split anything bigger. Formatting or style changes are always their own task.
@@ -215,4 +240,4 @@ VERIFICATION RESULTS:
 
 ## Progress tracking
 
-When a plan is approved, set each covered task's `PROGRESS` to Planned and fill in `PLAN`. When a task finishes, set its `PROGRESS` to Done, fill in `VERIFICATION RESULTS`, and update section 0. When a task is blocked (for example it cannot pass without weakening security or tests, or it needs a dependency the user has not approved), set `PROGRESS` to `Blocked: <reason>`, add it to Decisions Needed, and stop. The next eligible task is the first in queue order that is Queued or Planned and whose prerequisites are all Done; while a batch plan is active, take its next task in the batch's order. Mark the Pass 1 review stop as cleared when the user invokes reconnaissance again after it.
+When a plan is approved, set each covered task's `PROGRESS` to Planned and fill in `PLAN`. When a task finishes, set its `PROGRESS` to Done, fill in `VERIFICATION RESULTS`, and update section 0. When a task is blocked (for example it cannot pass without weakening security or tests, or it needs a dependency the user has not approved), set `PROGRESS` to `Blocked: <reason>`, add it to Decisions Needed, and stop. The next eligible task is the first in queue order that is Queued or Planned and whose prerequisites are all Done; while a batch plan is active, take its next task in the batch's order. When the full report has been shown, record the date under "Full report presented", and keep the "Decisions" line current as the developer answers.
