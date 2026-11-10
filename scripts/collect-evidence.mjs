@@ -10,6 +10,10 @@
 //   --compare <dir>   an earlier output folder; adds a before/after table of the key counts
 //   --scan-dir <dir>  also secret-scan a build output folder with gitleaks, values redacted
 //   --network         also run tools that query public vulnerability databases (npm audit, pnpm audit, osv-scanner)
+//
+//   node <skill-dir>/scripts/collect-evidence.mjs --preflight
+//       Only checks which tools are installed and prints, for each one that is missing, what the audit cannot
+//       prove without it and how to get it. Runs no tool and writes nothing. Use it before an audit starts.
 // Everything under .audit/ (earlier audits, scratch scripts, harnesses) is excluded from every tool,
 // and filtered out of their results as well, so audit artifacts never count as findings. Files git ignores
 // (virtual environments, build folders, installed packages) are not scanned either.
@@ -27,15 +31,16 @@ const argValue = (flag) => {
   const i = process.argv.indexOf(flag);
   return i !== -1 && process.argv[i + 1] ? process.argv[i + 1] : null;
 };
+const preflight = process.argv.includes('--preflight');
 const outArg = argValue('--out');
-if (!outArg) {
+if (!outArg && !preflight) {
   // No default: an implicit folder would land outside the run and later be mistaken for a legacy audit.
   process.stderr.write('--out is required, for example --out .audit/runs/<run-id>/evidence\n');
   process.exit(2);
 }
-const outDir = path.resolve(root, outArg);
+const outDir = preflight ? null : path.resolve(root, outArg);
 const auditRoot = path.join(root, '.audit');
-if (outDir === auditRoot || !outDir.startsWith(auditRoot + path.sep)) {
+if (!preflight && (outDir === auditRoot || !outDir.startsWith(auditRoot + path.sep))) {
   process.stderr.write('--out must point to a folder inside .audit/\n');
   process.exit(2);
 }
@@ -54,7 +59,7 @@ const CODE_EXT = new Set([
   '.py', '.go', '.rs', '.rb', '.java', '.kt', '.cs', '.php', '.swift',
 ]);
 
-fs.mkdirSync(outDir, { recursive: true });
+if (!preflight) fs.mkdirSync(outDir, { recursive: true });
 
 // True for any path (relative or absolute, either slash style) that lies under .audit/.
 const AUDIT_PATH = /(^|[\\/])\.audit([\\/]|$)/;
@@ -113,6 +118,143 @@ function tryJson(text) {
 const QUOTED = /(["'`])([^"'`\s]{20,})\1/g;
 const tokenLike = (s) => /\d/.test(s) && /[A-Za-z]/.test(s) && !/^[./@~]/.test(s) && !/\.(?:[cm]?[jt]sx?|json|d\.ts)$/.test(s);
 const redact = (text) => String(text).replace(QUOTED, (m, q, s) => (tokenLike(s) ? `${q}[redacted ${s.length} chars]${q}` : m));
+
+// What each tool proves. Used by --preflight and by the summary, so a missing tool is always named together
+// with the checklist items it leaves unproven.
+const PROVES = {
+  tsc: 'type errors (ARCH-03, QUAL-05)',
+  eslint: 'lint health (QUAL-10) and, with a complexity rule, function complexity (QUAL-01)',
+  knip: 'dead code and unused dependencies (QUAL-03)',
+  madge: 'circular imports (ARCH-01, QUAL-04)',
+  jscpd: 'duplicated code (QUAL-02)',
+  gitleaks: 'secrets in the repository and its history (SEC-12)',
+  'npm audit': 'known vulnerabilities in dependencies (SEC-19)',
+  'pnpm audit': 'known vulnerabilities in dependencies (SEC-19)',
+  'osv-scanner': 'known vulnerabilities in dependencies (SEC-19)',
+};
+const proves = (tool) => PROVES[tool] || PROVES[tool.replace(/ \(.*\)$/, '')] || '';
+const ESLINT_CONFIGS = ['eslint.config.js', 'eslint.config.mjs', 'eslint.config.cjs', 'eslint.config.ts', '.eslintrc', '.eslintrc.js', '.eslintrc.cjs', '.eslintrc.json', '.eslintrc.yml', '.eslintrc.yaml'];
+const LOCKFILES = ['package-lock.json', 'npm-shrinkwrap.json', 'pnpm-lock.yaml', 'yarn.lock', 'bun.lock', 'bun.lockb'];
+const managerOf = (lock) => (!lock ? null : lock.startsWith('pnpm') ? 'pnpm' : lock.startsWith('yarn') ? 'yarn' : lock.startsWith('bun') ? 'bun' : 'npm');
+
+// --preflight: say what is installed and what each missing tool costs, before any audit time is spent.
+// It only looks for files and programs. It runs no tool and writes nothing.
+if (preflight) {
+  // Tools for languages the evidence script does not run itself (see references/tools-by-language.md).
+  // Each entry is [alternatives, what it proves, optional]; any one alternative is enough. Optional tools only
+  // add leads for Pass 1, which proves its findings by tracing the code, so missing one blocks no verdict.
+  const LEADS = 'extra security leads for Pass 1';
+  const OTHER_LANGUAGES = {
+    Python: { ext: ['.py'], tools: [[['ruff'], 'lint health (QUAL-10)'], [['mypy', 'pyright'], 'type errors (ARCH-03, QUAL-05)'], [['bandit'], LEADS, true], [['pip-audit'], 'known vulnerabilities in dependencies (SEC-19)'], [['vulture'], 'dead code (QUAL-03)']] },
+    Go: { ext: ['.go'], tools: [[['go'], 'compile and vet errors (ARCH-03, QUAL-10)'], [['staticcheck', 'golangci-lint'], 'lint health and unused code (QUAL-10, QUAL-03)'], [['gosec'], LEADS, true], [['govulncheck'], 'known vulnerabilities in dependencies (SEC-19)']] },
+    Rust: { ext: ['.rs'], tools: [[['cargo'], 'compile errors and unused code (ARCH-03, QUAL-03)'], [['cargo-clippy'], 'lint health (QUAL-10)'], [['cargo-audit'], 'known vulnerabilities in dependencies (SEC-19)']] },
+    Ruby: { ext: ['.rb'], tools: [[['rubocop'], 'lint health (QUAL-10)'], [['brakeman'], `${LEADS} (Rails)`, true], [['bundle-audit', 'bundler-audit'], 'known vulnerabilities in dependencies (SEC-19)']] },
+    PHP: { ext: ['.php'], tools: [[['phpstan', 'psalm'], 'lint health and type errors (QUAL-10, ARCH-03)'], [['composer'], 'known vulnerabilities in dependencies, through composer audit (SEC-19)']] },
+  };
+  const extCounts = {};
+  const bump = (rel) => {
+    const ext = path.extname(rel).toLowerCase();
+    if (CODE_EXT.has(ext)) extCounts[ext] = (extCounts[ext] || 0) + 1;
+  };
+  const listed = spawnSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { cwd: root, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
+  const inGit = listed.status === 0;
+  if (inGit) {
+    for (const rel of listed.stdout.split('\0').filter(Boolean)) {
+      if (!rel.split('/').some((seg) => SKIP_DIRS.has(seg)) && !inAudit(rel)) bump(rel);
+    }
+  } else {
+    const walk = (dir) => {
+      let entries;
+      try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+      for (const e of entries) {
+        if (e.isSymbolicLink()) continue;
+        if (e.isDirectory()) { if (!SKIP_DIRS.has(e.name)) walk(path.join(dir, e.name)); }
+        else bump(e.name);
+      }
+    };
+    walk(root);
+  }
+
+  const pkg = exists('package.json') ? tryJson(fs.readFileSync(path.join(root, 'package.json'), 'utf8')) || {} : null;
+  const lock = LOCKFILES.find(exists);
+  const manager = managerOf(lock);
+  // With a package.json, install as a dev dependency using the project's own package manager; without one, globally.
+  const install = (name) => (pkg ? `${{ npm: 'npm install --save-dev', pnpm: 'pnpm add -D', yarn: 'yarn add -D', bun: 'bun add -d' }[manager || 'npm']} ${name}` : `npm install -g ${name}`);
+  const platformHint = (win, mac, other) => (isWin ? win : process.platform === 'darwin' ? mac : other);
+  const rows = [];
+  const add = (tool, status, what, how = '') => rows.push({ tool, status, what, how });
+  const notes = [];
+
+  const jsFiles = ['.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.mts', '.cts', '.vue', '.svelte'].reduce((n, e) => n + (extCounts[e] || 0), 0);
+  if (pkg || jsFiles) {
+    const tsConfig = firstExisting(['tsconfig.json', 'jsconfig.json']);
+    const needConfig = 'add a tsconfig.json or jsconfig.json (checkJs covers plain JavaScript)';
+    if (findBin('tsc')) add('tsc', tsConfig ? 'installed' : 'not set up', proves('tsc'), tsConfig ? '' : needConfig);
+    else add('tsc', 'missing', proves('tsc'), `${install('typescript')}${tsConfig ? '' : `, then ${needConfig}`}`);
+
+    const eslintConfig = firstExisting(ESLINT_CONFIGS) || (pkg && pkg.eslintConfig);
+    if (findBin('eslint')) add('eslint', eslintConfig ? 'installed' : 'not set up', proves('eslint'), eslintConfig ? '' : 'add an ESLint configuration file');
+    else add('eslint', 'missing', proves('eslint'), `${install('eslint')}${eslintConfig ? '' : ', then add an ESLint configuration file'}`);
+    const deps = pkg ? { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) } : {};
+    if (!deps['eslint-plugin-sonarjs']) {
+      notes.push("Function complexity (QUAL-01) is measured only if ESLint has a complexity rule. eslint-plugin-sonarjs is not in package.json, so unless your config turns on ESLint's own `complexity` rule, QUAL-01 will stay Unverified.");
+    }
+
+    if (pkg) add('knip', findBin('knip') ? 'installed' : 'missing', proves('knip'), findBin('knip') ? '' : install('knip'));
+    else add('knip', 'not set up', proves('knip'), 'knip needs a package.json');
+    add('madge', findBin('madge') ? 'installed' : 'missing', proves('madge'), findBin('madge') ? '' : install('madge'));
+  } else {
+    notes.push('No JavaScript or TypeScript here, so tsc, eslint, knip and madge do not apply.');
+  }
+
+  add('jscpd', findBin('jscpd') ? 'installed' : 'missing', proves('jscpd'), findBin('jscpd') ? '' : install('jscpd'));
+  add('gitleaks', findBin('gitleaks') ? 'installed' : 'missing', proves('gitleaks'), findBin('gitleaks') ? '' : platformHint('winget install -e --id Gitleaks.Gitleaks', 'brew install gitleaks', 'see https://github.com/gitleaks/gitleaks#installing'));
+
+  const networkNote = 'runs only if you allow network tools';
+  if (manager === 'npm' || manager === 'pnpm') {
+    add(`${manager} audit`, findBin(manager) ? 'installed' : 'missing', proves(`${manager} audit`), findBin(manager) ? networkNote : `install ${manager}`);
+  } else if (pkg && !lock) {
+    add('npm audit', 'not set up', proves('npm audit'), 'no lockfile found; commit one so dependencies can be checked');
+  }
+  // osv-scanner is optional when the project's own package manager can audit every dependency it has.
+  const otherLanguages = Object.values(OTHER_LANGUAGES).some((l) => l.ext.some((e) => extCounts[e]));
+  const managerAudits = (manager === 'npm' || manager === 'pnpm') && findBin(manager) && !otherLanguages;
+  const osvHint = platformHint('winget install Google.OSVScanner', 'brew install osv-scanner', 'see https://google.github.io/osv-scanner/installation');
+  if (findBin('osv-scanner')) add('osv-scanner', 'installed', proves('osv-scanner'), networkNote);
+  else if (managerAudits) add('osv-scanner', 'missing (optional)', proves('osv-scanner'), `${osvHint}. Optional here: ${manager} audit covers this project.`);
+  else add('osv-scanner', 'missing', proves('osv-scanner'), osvHint);
+
+  for (const [language, { ext, tools }] of Object.entries(OTHER_LANGUAGES)) {
+    const files = ext.reduce((n, e) => n + (extCounts[e] || 0), 0);
+    if (!files) continue;
+    notes.push(`${language} files found (${files}). The audit runs that language's tools by hand; they are in the table above and in references/tools-by-language.md.`);
+    for (const [names, what, optional] of tools) {
+      const found = names.find((n) => findBin(n));
+      add(names.join(' or '), found ? 'installed' : optional ? 'missing (optional)' : 'missing', what, found ? (names.length > 1 ? `found ${found}` : '') : "see the tool's own install instructions");
+    }
+  }
+  if ((extCounts['.java'] || 0) + (extCounts['.kt'] || 0)) {
+    notes.push("Java or Kotlin files found. The audit uses the build's own check task; see references/tools-by-language.md.");
+  }
+
+  const gitFound = Boolean(findBin('git'));
+  const out = ['# codedetective preflight', '', 'This only checked what is installed. No tool was run and nothing was written.', '', '**Required**', `- Node.js: ${process.version}`];
+  out.push(`- git: ${!gitFound ? 'not found. The diff check and the file inventory need it.' : inGit ? 'found, and this folder is a git repository' : 'found, but this folder is not a git repository. The diff check that guards every fix needs one.'}`);
+  out.push('', '**Analyzers**', '', '| Tool | Status | What it proves | To get it |', '|---|---|---|---|');
+  for (const r of rows) out.push(`| ${r.tool} | ${r.status} | ${r.what} | ${r.how} |`);
+  if (notes.length) out.push('', ...notes.map((n) => `- ${n}`));
+  const gaps = rows.filter((r) => r.status === 'missing' || r.status === 'not set up');
+  out.push('');
+  if (!gaps.length) {
+    out.push('Every tool this project can use is installed.');
+  } else {
+    out.push(`Missing or not set up: ${gaps.map((r) => r.tool).join(', ')}.`);
+    out.push(`Without them the audit cannot prove: ${[...new Set(gaps.map((r) => r.what))].join('; ')}.`);
+    out.push('Those checks stay Unverified, so the verdict cannot reach "Standard met". The audit never installs tools: install the ones you want and run it again, or continue without them.');
+  }
+  process.stdout.write(out.join('\n') + '\n');
+  process.exit(0);
+}
 
 const results = [];
 function record(tool, status, extra = {}) {
@@ -193,9 +335,8 @@ function record(tool, status, extra = {}) {
 
 // 2. Linter (uses the project's own configuration)
 (() => {
-  const configs = ['eslint.config.js', 'eslint.config.mjs', 'eslint.config.cjs', 'eslint.config.ts', '.eslintrc', '.eslintrc.js', '.eslintrc.cjs', '.eslintrc.json', '.eslintrc.yml', '.eslintrc.yaml'];
   const pkg = tryJson(exists('package.json') ? fs.readFileSync(path.join(root, 'package.json'), 'utf8') : '') || {};
-  if (!firstExisting(configs) && !pkg.eslintConfig) return record('eslint', 'skipped', { reason: 'no ESLint configuration found' });
+  if (!firstExisting(ESLINT_CONFIGS) && !pkg.eslintConfig) return record('eslint', 'skipped', { reason: 'no ESLint configuration found' });
   const bin = findBin('eslint');
   if (!bin) return record('eslint', 'missing');
   const r = run(bin, ['.', '--format', 'json', '--no-error-on-unmatched-pattern', '--ignore-pattern', '.audit/**']);
@@ -353,8 +494,8 @@ function record(tool, status, extra = {}) {
     record('osv-scanner', 'skipped', { reason });
     return;
   }
-  const lock = ['package-lock.json', 'npm-shrinkwrap.json', 'pnpm-lock.yaml', 'yarn.lock', 'bun.lock', 'bun.lockb'].find(exists);
-  const manager = !lock ? null : lock.startsWith('pnpm') ? 'pnpm' : lock.startsWith('yarn') ? 'yarn' : lock.startsWith('bun') ? 'bun' : 'npm';
+  const lock = LOCKFILES.find(exists);
+  const manager = managerOf(lock);
   if (!manager) {
     record('npm audit', 'skipped', { reason: 'no JavaScript lockfile' });
   } else if (manager === 'npm' || manager === 'pnpm') {
@@ -482,7 +623,8 @@ if (compareDir) {
 }
 const missing = results.filter((r) => r.status === 'missing').map((r) => r.tool);
 if (missing.length) {
-  lines.push('', `Not installed (recommend to the user; never install during reconnaissance): ${missing.join(', ')}`);
+  lines.push('', 'Not installed (recommend to the user; never install during reconnaissance). Name each one in the report with what it left unproven:');
+  for (const tool of missing) lines.push(`- ${tool}: cannot prove ${proves(tool) || 'its checks'}`);
 }
 const partial = results.filter((r) => r.status === 'partial').map((r) => r.tool);
 if (partial.length) {
