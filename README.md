@@ -131,6 +131,7 @@ The audit ends by showing you the full report in the conversation, not a summary
 - every P0, P1 and P2 task, each with what is wrong, where it is, and the evidence that proves it
 - what it suspects but could not prove, and what would settle each one
 - the decisions and questions waiting on you
+- your past decisions, each with what the code says now and whether it conflicts with another
 - what it could not check, and why
 
 The same report, with the full traces and tool output, is saved in `.audit/runs/<date>/code-health-report.md`.
@@ -149,6 +150,7 @@ Picking a choice is the same as typing the command, so you never need to remembe
 2. **Correct it.** Tell it about any finding that is wrong, or anything it got wrong about your system. It re-checks the finding with what you told it and updates the report.
 3. **Settle what only you know.** Some items can't be proven from code ("we only ever run one instance", "alerts page me"). Your answer confirms or dismisses them.
 4. **Decide what you won't fix.** Anything you accept as it is gets recorded with your reason and leaves the queue.
+5. **Review your past decisions.** Keep, reverse or update each one. A decision you reverse goes back into the queue as a fix.
 
 Planning covers only what is still in the queue after your decisions.
 
@@ -211,7 +213,8 @@ Two outcomes exist so the finish line is always reachable:
 - still check every accepted item, and test its reason against the code. If you said "invite-only beta" and signup is now public, the decision is reopened with the evidence.
 - speak up with a **Reconsider** recommendation whenever there's real evidence that reversing a decision would better meet the standard: the risk is bigger than assumed, a cheaper fix now exists, or something changed. You get the evidence and the cost of the fix.
 - don't re-argue a decision when nothing new argues against it, so audits don't go in circles.
-- ask you once, at the start of each new audit, to keep or review the decisions being carried forward. Security-level ones and anything older than six months are always on that list.
+- compare your decisions with each other. If a later choice contradicts an earlier one, or removes the reason for it, the report names both and asks which is true.
+- list every past decision in the final report, with what the code says now and a keep or reconsider recommendation. You review them with the evidence in front of you, instead of being asked before the audit has looked at anything.
 - show in the verdict which accepted items you reconfirmed this time and which were carried forward without reconfirmation.
 
 The same goes for the skill's own past conclusions: a finding it once ruled a false positive is re-checked against the current code before it's set aside again.
