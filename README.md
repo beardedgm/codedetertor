@@ -77,7 +77,7 @@ To update a cloned install, run `git pull` inside that folder.
 | Command | What it does |
 |---|---|
 | `/codedetective` | Resumes an unfinished audit. On a finished audit with open fixes, shows status and asks what's next. Starts a new audit only when nothing is left to fix. Never starts fixing. |
-| `/codedetective new` | Always starts a fresh audit. |
+| `/codedetective new` | Always starts a fresh audit of the whole codebase, from beginning to end. It never resumes, and it never looks only at what changed. |
 | `/codedetective pass <1-4>` | Runs or reruns one pass. |
 | `/codedetective plan` | Plans all P0 tasks together in plan mode, for one approval. Changes no code. |
 | `/codedetective plan <P1\|P2\|TASK-IDs>` | Plans another tier, or a list of tasks such as `P0-01 P1-03`. |
@@ -100,6 +100,8 @@ Only `fix` ever changes your code, and only after you approve its plan. `plan` n
 
 All four passes run in one go. The audit pauses only for a question it cannot continue without, and it never offers to plan or fix anything along the way. However serious a finding is, it waits for the full report, where it is listed first.
 
+**Every audit covers the whole codebase.** A new audit examines everything from beginning to end, as if for the first time. It never narrows to recent commits, pull requests or files changed since the last audit, and it never uses an earlier report to decide where to look. To make that checkable, it starts by listing every source file, and the report states how many were examined out of the total and names anything it did not get to, with the reason. An area it did not examine keeps the verdict from reaching "Standard met".
+
 Stack-specific checks load automatically when Phase 0 detects them: Node.js and Express 5, React 19 and Vite, Mongoose and MongoDB, Cloudflare R2 and Render, and Playwright with JSDoc type checking. Each check has its own ID (such as `EXP-02` or `MONGO-01`) and counts toward the verdict like any checklist item.
 
 **On other stacks** (Supabase, Postgres with Prisma, Next.js, S3, Vercel, Python, Go and so on), the general checklists still apply in full. What's missing is version-specific depth, and the skill is honest about it:
@@ -115,11 +117,11 @@ Every audit is a separate run in its own dated folder under `.audit/runs/`, so a
 
 - **Resuming.** Running `/codedetective` again continues an audit that hasn't finished, such as one that was interrupted or paused for a question. If that audit is more than 3 days old or the code has changed since it started, it asks whether to resume or start over.
 - **Starting fresh.** Once an audit is complete and nothing is left to fix, the next `/codedetective` starts a new one. If fixes are still open, it asks first instead of replacing your queue. `/codedetective new` starts a new one any time.
-- **Comparing.** A new audit compares itself with the previous one by checklist ID: what was fixed, what is still open, what is new, and anything that came back after being fixed. Regressions are flagged and ranked first within their priority. Nothing is copied over: every finding is re-verified against today's code.
+- **Comparing.** A new audit compares itself with the previous one by checklist ID: what was fixed, what is still open, what is new, and anything that came back after being fixed. Regressions are flagged and ranked first within their priority. Nothing is copied over: every finding is re-verified against today's code. The comparison is written at the end, after the new audit has examined everything on its own, so an earlier audit never decides where a new one looks.
 - **Fixing.** Once the audit is finished, `plan` and `fix` work on its queue, even across several days. `status` works at any time.
 - **Older files.** If `.audit/` holds files from before runs existed, they are moved into a `legacy` run folder automatically before anything else happens.
 - **Older report formats.** If a run's report was started by an earlier version of the skill, it's upgraded once, in place, when you next resume it: missing sections like the verdict and the coverage table are added from what the report already recorded, without redoing finished passes. Anything the old report never recorded is marked unverified rather than guessed, and it offers to re-run just that pass.
-- **Shared across audits.** `context.md` and `false-positives.md` stay at the top of `.audit/`, because they describe the project rather than one audit.
+- **Shared across audits.** `context.md`, `false-positives.md` and `accepted.md` stay at the top of `.audit/`, because they describe the project rather than one audit. Each new audit re-checks them against the code. They change how something is reported, never whether it is examined.
 
 ## When the audit finishes
 
