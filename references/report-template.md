@@ -89,7 +89,7 @@ Approved plans are saved in the current run's `plans/` folder after plan mode, b
 
 ## Report structure
 
-Write `code-health-report.md` in the current run's folder (`.audit/runs/<run-id>/`) with exactly these sections. Append each pass as you finish it, and keep the verdict and sections 7 to 9 current as findings accumulate.
+Write `code-health-report.md` in the current run's folder (`.audit/runs/<run-id>/`) with exactly these sections. Append each pass as you finish it, and keep the verdict and sections 7 to 10 current as findings accumulate.
 
 ```markdown
 # <Project Name>: Code Health & Self-Remediation Plan
@@ -114,6 +114,7 @@ Write `code-health-report.md` in the current run's folder (`.audit/runs/<run-id>
 - **Git State:** commit hash, working tree status, pre-existing changes.
 - **Stack Profile:** exact versions of runtime, frameworks, ODM or driver, build tool, test runner.
 - **Architecture Summary:** entry points, module boundaries, main data flows, external services.
+- **File Inventory:** every source file in scope, counted by area, taken from the repository itself, and what was left out (generated output, vendored code, lockfiles, binary assets). Section 10 tracks what has been examined.
 - **Threat Model:** trust boundaries (where untrusted data enters) and assets (what is worth stealing or breaking).
 - **Context Verification:** each developer-supplied claim marked verified, false, or unverifiable.
 - **Applicability Map:** items that apply, items Not Applicable (with reasons, by ID), conditional sections that apply, project-specific hypotheses added, stack reference files loaded.
@@ -151,7 +152,7 @@ Up to five highest-impact Confirmed risks. If fewer than five meet the bar, list
 Tasks in the schema below.
 
 ## 9. Checklist Coverage
-One line per gated item (every checklist item except `QUAL-11` to `QUAL-16`, plus loaded stack items and `GAP` rows), plus any `PROJ-NN` findings, so the verdict can be checked. The rows below are format examples only:
+One line per gated item (every checklist item except `QUAL-11` to `QUAL-16`, plus loaded stack items, `GAP` rows and `COV` rows), plus any `PROJ-NN` findings, so the verdict can be checked. The rows below are format examples only:
 
 | ID | Outcome | Where or why |
 |---|---|---|
@@ -163,7 +164,20 @@ One line per gated item (every checklist item except `QUAL-11` to `QUAL-16`, plu
 | MONGO-02 | Passed | Filters built from picked fields in server/routes/*.js |
 | GAP-Supabase | Unverified | No stack reference; checked against the general checklists only |
 
-Rows cover every gated checklist item, every non-advisory item of each loaded stack reference, and one `GAP-<technology>` row per detected technology with no stack reference. Outcomes: Passed (a Verified Safeguard or nothing found), Not Applicable, Confirmed by developer (with what they said and the date), Accepted (with the reason), Finding (with task or section reference), Unverified (with the blocker), Decision Needed. The verdict counts come from this table.
+Rows cover every gated checklist item, every non-advisory item of each loaded stack reference, one `GAP-<technology>` row per detected technology with no stack reference, and one `COV-<area>` row per area or file left unexamined (section 10). Outcomes: Passed (a Verified Safeguard or nothing found), Not Applicable, Confirmed by developer (with what they said and the date), Accepted (with the reason), Finding (with task or section reference), Unverified (with the blocker), Decision Needed. The verdict counts come from this table.
+
+## 10. Codebase Coverage
+Shows that the audit examined the whole repository, so "we looked at everything" can be checked. Update it as each pass finishes. The rows below are format examples only:
+
+- Inventory: <n> source files in scope across <m> areas, from `git ls-files` at commit <short hash>. Left out: <generated output, vendored code, lockfiles, binary assets, with paths>.
+- Examined: <n of n> files read in this run.
+
+| Area | Files | Read | Passes that examined it | Not examined, and why |
+|---|---|---|---|---|
+| server/routes | 24 | 24 | 1, 2, 3, 4 | - |
+| client/src/legacy | 40 | 0 | none | Session ended before it was reached; COV-client-legacy is Unverified |
+
+Every file in the inventory is read at least once, and every pass considers every area. Anything left unexamined when the run ends is listed here with the reason and gets a `COV-<area>` row in section 9 marked Unverified.
 ```
 
 ---
@@ -173,7 +187,7 @@ Rows cover every gated checklist item, every non-advisory item of each loaded st
 When the audit is complete, show this in the conversation, in this order. It is the whole picture the developer decides from, so list every queued task and never cut it down to highlights. Keep each row short; the full traces and tool excerpts stay in the report file.
 
 1. **Verdict:** the verdict line.
-2. **At a glance:** task counts by priority (P0, P1, P2), how many items are Probable or Unverified, how many decisions are waiting on the developer, how many advisory notes there are, and what was examined (the four passes and the stack references loaded).
+2. **At a glance:** task counts by priority (P0, P1, P2), how many items are Probable or Unverified, how many decisions are waiting on the developer, how many advisory notes there are, and what was examined: the four passes, the stack references loaded, and how many source files were read out of the inventory (for example "412 of 412 files").
 3. **P0 Critical**, then **P1 High**, then **P2 Hygiene:** one table for each, with every task in queue order. A priority with no tasks says "None".
 
    | Task | What is wrong | Where | Evidence |
@@ -183,7 +197,7 @@ When the audit is complete, show this in the conversation, in this order. It is 
    The row above is a format example only. "What is wrong" is one plain sentence a developer outside the project would understand. "Evidence" names the kind of proof and its key fact: the tool and what it reported, the trace's source and sink, the failing test, or the measurement.
 4. **Not proven yet:** every Probable and Unverified item, with its ID, what was seen, and the step that would settle it.
 5. **Waiting on you:** every Decision Needed and every question only the developer can answer, each with the choice or fact needed.
-6. **Not checked:** tools that were missing or skipped, checks that did not happen, and technologies checked only against the general checklists.
+6. **Not checked:** any files or areas that were not examined and why, tools that were missing or skipped, checks that did not happen, and technologies checked only against the general checklists.
 7. **Where the full report is:** the path to `code-health-report.md`, and one line saying that nothing has been changed and nothing will be planned or fixed until they ask.
 
 Record the date in the Progress section ("Full report presented"). If the conversation ends before the developer has seen it, present it again when they next run `/codedetective`.
