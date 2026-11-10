@@ -108,7 +108,7 @@ Write `code-health-report.md` in the current run's folder (`.audit/runs/<run-id>
 - Pass 4: <...>
 - Full report presented: <date, or "not yet">
 - Decisions: <n waiting on the developer | all answered on date>
-- Remediation: <n of m tasks done; next eligible task ID>
+- Remediation: <n of m tasks done; open tasks by priority (P0 n, P1 n, P2 n); next eligible task ID; the next step and its command>
 - Active batch plan: <plans/batch-<name>.md, tasks remaining | none>
 
 ## 1. Codebase Familiarization & Baseline
@@ -233,6 +233,7 @@ STATUS: <Confirmed | Preventive>
 PRIORITY: <P0 | P1 | P2>
 PROGRESS: <Queued | Planned | In progress | Done | Blocked: reason>
 PLAN: <plans/<file>.md in the run folder once a plan is approved, or "none">
+DELIVERY: <"not committed" | commit <short hash> | PR #<n> open | PR #<n> merged; filled in only when the user asks for a commit, pull request or merge>
 CHECK_ID: <Checklist ID, e.g. SEC-03, or PROJ-NN for a project-specific finding>
 SUBSYSTEM: <Comma-separated list of affected areas>
 STANDARD: <Security: OWASP Top 10:2025 category and ASVS 5.0 chapter. Others: the source tag on the checklist item (a CWE ID or named practice from sources.md). PROJ-NN: the closest source, or "none">
@@ -265,4 +266,4 @@ VERIFICATION RESULTS:
 
 ## Progress tracking
 
-When a plan is approved, set each covered task's `PROGRESS` to Planned and fill in `PLAN`. When a task finishes, set its `PROGRESS` to Done, fill in `VERIFICATION RESULTS`, and update section 0. When a task is blocked (for example it cannot pass without weakening security or tests, or it needs a dependency the user has not approved), set `PROGRESS` to `Blocked: <reason>`, add it to Decisions Needed, and stop. The next eligible task is the first in queue order that is Queued or Planned and whose prerequisites are all Done; while a batch plan is active, take its next task in the batch's order. When the full report has been shown, record the date under "Full report presented", and keep the "Decisions" line current as the developer answers.
+When a plan is approved, set each covered task's `PROGRESS` to Planned and fill in `PLAN`. When a task finishes, set its `PROGRESS` to Done, fill in `VERIFICATION RESULTS`, and update section 0. When the user asks for a commit, pull request or merge, record it in `DELIVERY` for each task it covers. When a task is blocked (for example it cannot pass without weakening security or tests, or it needs a dependency the user has not approved), set `PROGRESS` to `Blocked: <reason>`, add it to Decisions Needed, and stop. The next eligible task is the first in queue order that is Queued or Planned and whose prerequisites are all Done; while a batch plan is active, take its next task in the batch's order. When the full report has been shown, record the date under "Full report presented", and keep the "Decisions" line current as the developer answers.

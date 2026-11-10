@@ -289,6 +289,14 @@ Each `fix` run handles exactly one task and then stops. For every fix it:
 
 It never adds a dependency without your approval, and never commits, pushes, deploys or opens a pull request unless you ask.
 
+**It always tells you what comes next.** Every stop ends by saying how many tasks are still open at each priority and asking what you want to do, with the command beside each choice so you can pick it now or type it later:
+
+- If a planned fix is waiting, it offers to build it.
+- If a priority level is finished, it says so ("All P0 tasks are done") and offers to plan the next one. Planning always comes before fixing.
+- If nothing is left, it offers a new audit to confirm the standard is met.
+
+When you ask it to commit, open a pull request, or merge (including "merge when CI is green"), it does that, tells you what happened, records it against the fix, and then comes back with the same question. It never goes quiet while fixes are still open.
+
 ## Safety guarantees
 
 - **The full report comes first.** The audit runs all four passes and shows you everything it found before any fix is planned or offered. `plan` and `fix` refuse to run on an unfinished audit.
