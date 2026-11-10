@@ -255,19 +255,30 @@ Plans are where the user reviews a fix before any code changes, so a plan must b
 4. Take a snapshot before writing any code: run `node "${CLAUDE_SKILL_DIR}/scripts/check-diff.mjs" --snapshot` and record the ID in the task. It captures the working tree as it is, including the developer's own uncommitted edits and earlier fixes, so the diff check judges only this fix's changes.
 5. Before adding any helper or abstraction, search for an existing equivalent and reuse it. A new abstraction needs at least two real call sites.
 6. Never add or upgrade a dependency without the user's explicit approval and a check that the exact package name exists in the registry with a credible history. Never install a package name you proposed yourself without that confirmation; AI-suggested package names are sometimes invented, and attackers register them.
-7. Where feasible, write or update a focused regression test that fails before the fix. For preventive or structural work where nothing can be reproduced, state how the fix is verified.
+7. Where feasible, write or update a focused regression test that fails before the fix, and run it before building the fix to see it fail; a test never seen failing proves nothing. For preventive or structural work where nothing can be reproduced, state how the fix is verified.
 8. Build what the approved plan says, and keep the diff to it, roughly a handful of files. If the work turns out to need a material departure from the plan, stop and re-plan rather than improvise. Formatting or style changes go in their own task, never mixed with behavior changes.
-9. Run the task's verification commands under the same isolation rules as reconnaissance.
+9. Run the task's verification commands under the same isolation rules as reconnaissance, after the last edit to the code. A failing command means the fix is not finished: find the cause, or stop and report the blocker. Never mark a task done over a failure.
 10. Run `node "${CLAUDE_SKILL_DIR}/scripts/check-diff.mjs" --base <snapshot ID>`, adding `--allow <file>` for each config file the approved plan names. It fails if this fix adds test skips or focus markers, a suppression comment without a written reason (`@ts-ignore` and `@ts-nocheck` always fail), disabled TLS checks, `--no-verify`, a deleted test file or a test moved out of the test paths, or an unplanned change to a config file that can switch checks off. It flags for review a suppression with a written reason, removed assertions, empty catch blocks and manifest changes; each needs a stated justification in the task. A failure means the fix is rejected: undo only this fix's offending change (never anything that was in the snapshot) and find a real fix, or stop and report the blocker.
 11. Rerun the evidence script with `--out .audit/runs/<run-id>/evidence/after-<TASK-ID> --compare <the previous evidence folder>`, so the baseline that findings cite is never overwritten, and record the change table in the task. A fix that makes a count worse needs a stated reason.
-12. Mark the task done in the report with its verification results, recompute the verdict, then stop and ask the user to review before the next task. End with the next-step question (below).
+12. Mark the task done only when it is proven (see "Proof of done"), record the verification results in the report, and recompute the verdict. Then stop, show the proof, and ask the user to review before the next task. End with the next-step question (below).
+
+**Proof of done.** A task is Done only when all of this is true, and you saw each result yourself in this session, after the last edit to the code:
+- every verification command in the task ran and passed;
+- the regression test failed before the fix and passes after it, or, where no test is feasible, the stated way of verifying the fix was carried out;
+- the diff check has no FAIL, and every REVIEW item has a written justification;
+- the evidence rerun shows no count made worse without a stated reason;
+- the task's done criteria are met.
+
+If any of these is missing, the task is not Done: keep working on it, or mark it `Blocked: <reason>` and report it. Never report a result from memory, from an earlier run, or from what the change ought to do: run it again. If a check could not be run (a service that is not available locally, a missing tool), say which one and why, and mark the task `Blocked: could not verify <check>` so the developer decides; do not call it done.
+
+At the review stop, show the proof in the conversation, not just a statement that it passed: each command with its result (pass and fail counts or exit status, and the lines of output that matter), the regression test's result before and after the fix, the diff check result, and the evidence change table. Keep it short, and never print a secret.
 
 **Batch fixing (P2 only).** Hygiene work like dead exports or duplication can run to dozens of tasks, and a review stop after each costs more than it protects. `/codedetective fix batch <name>` builds every task in an approved batch plan back to back:
 - Only P2 tasks, under a batch plan the user approved. P0 and P1 tasks always get their own fix run and review stop.
 - Each task still goes through every remediation step: drift check, its own snapshot, regression test where feasible, verification commands, diff check and evidence rerun.
 - Stop at the first failing test, diff check FAIL, material drift from the plan, new dependency, or anything the plan did not cover, and report which task stopped and why. Earlier tasks in the batch stay done.
 - REVIEW items from the diff check are justified in each task as usual and listed together at the end.
-- End with one review stop covering the whole batch: each task's result, the combined evidence change, and the REVIEW items, then the next-step question.
+- End with one review stop covering the whole batch: each task's result with its proof, the combined evidence change, and the REVIEW items, then the next-step question.
 
 **Never weaken security or test integrity to make a check pass.** That includes hardcoding tokens or credentials, disabling TLS verification, commenting out or bypassing auth middleware, skipping or deleting tests, loosening assertions, adding suppression comments, bypassing git hooks, and catching and swallowing errors. These shortcuts convert a visible problem into an invisible one. If a task cannot pass without one of them, stop and report the blocker.
 

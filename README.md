@@ -274,7 +274,7 @@ Each `fix` run handles exactly one task and then stops. For every fix it:
 2. Re-reads the target code, since line numbers drift as earlier fixes land.
 3. Takes a snapshot of your working tree, including any edits you haven't committed, so only this fix's own changes are judged afterward.
 4. Reuses an existing helper instead of writing a new one where possible.
-5. Writes a regression test that fails before the fix, where that is feasible.
+5. Writes a regression test that fails before the fix, where that is feasible, and runs it to see it fail.
 6. Builds what the plan says and nothing more. If the work needs to depart from the plan, it stops and re-plans. Formatting changes are always a separate task.
 7. Runs the task's verification commands.
 8. Runs `scripts/check-diff.mjs` against the snapshot. It rejects the fix if it:
@@ -285,7 +285,9 @@ Each `fix` run handles exactly one task and then stops. For every fix it:
 
    It flags for your review any suppression that does carry a reason, removed assertions, empty catch blocks, and manifest changes. It never undoes anything that was in the snapshot.
 9. Reruns the evidence script into its own folder and records a before-and-after table, so the original evidence is never overwritten.
-10. Marks the task done in the report and waits for your review.
+10. Marks the task done in the report, shows you the proof, and waits for your review.
+
+**Done means proven.** A fix is marked done only when every verification command was run after the last edit and passed, the regression test failed before the fix and passes after it, the diff check passed, and the task's done criteria are met. It shows you that proof in the conversation: each command and its result, the test before and after, the diff check, and the before-and-after evidence table. It never reports a result from memory. If a check failed or could not be run, the task stays open or is marked blocked, with the reason.
 
 It never adds a dependency without your approval, and never commits, pushes, deploys or opens a pull request unless you ask.
 
