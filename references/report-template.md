@@ -48,7 +48,7 @@ Persistent exclusions, read at the start of every invocation. Add an entry whene
 
 ## Accepted items file
 
-Items the developer decided on: an answered Decision Needed, a finding they chose not to fix, or a blocked task they accepted. Read at the start of every invocation and carried across runs, but re-evaluated, never obeyed blindly (see "Earlier decisions are re-evaluated" in SKILL.md): each audit still checks the item, tests its premise against the code, and raises a Reconsider recommendation when there is evidence that reversing it would better meet the standard. Facts the developer confirmed (Confirmed by developer) are recorded in the run's report, not here, because they can change between audits and are asked again each time.
+Items the developer decided on: an answered Decision Needed, a finding they chose not to fix, or a blocked task they accepted. Read at the start of every invocation and carried across runs, but re-evaluated, never obeyed blindly (see "Earlier decisions are re-evaluated" in SKILL.md): each audit still checks the item, tests its premise against the code, compares the decisions with each other, and raises a Reconsider recommendation when there is evidence that reversing one would better meet the standard. The developer reviews them in the final report, not before the audit. Facts the developer confirmed (Confirmed by developer) are recorded in the run's report, not here, because they can change between audits and are asked again each time.
 
 ```markdown
 # Accepted
@@ -132,7 +132,17 @@ For each:
 - **Next Step:** the specific command, trace or environment that would confirm or dismiss it.
 
 ## 4. Decisions Needed
-Questions only the developer can answer: a business choice the right fix depends on, a blocked task, a fact the code cannot show, or a **Reconsider** recommendation about an earlier decision (listed first, with the decision's date, what changed, the evidence, and the fix and its cost). For each: the checklist ID, what was found, the choice or fact needed, and the options with their trade-offs. Once answered, record the outcome here and in Checklist Coverage: a task, Accepted (and an entry in `.audit/accepted.md`), Confirmed by developer, or a Finding if the developer says something is missing.
+**New decisions.** Questions only the developer can answer: a business choice the right fix depends on, a blocked task, or a fact the code cannot show. For each: the checklist ID, what was found, the choice or fact needed, and the options with their trade-offs. Once answered, record the outcome here and in Checklist Coverage: a task, Accepted (and an entry in `.audit/accepted.md`), Confirmed by developer, or a Finding if the developer says something is missing.
+
+**Earlier decisions.** Every decision carried forward in `.audit/accepted.md`, reviewed against today's code and against each other. List **Reconsider** recommendations and conflicts first; a Reconsider also gives what changed, the evidence, and the fix and its rough cost. The rows below are format examples only:
+
+| ID | Decision and date | Reason given | What the code says now | Conflicts with | Recommendation |
+|---|---|---|---|---|---|
+| SEC-16 | No signup rate limit, 2026-08-02 | Invite-only beta | Contradicted: public signup route added in server/routes/auth.js | none | Reconsider: add the limit (small, one middleware) |
+| PERF-08 | No graceful shutdown, 2026-09-10 | "We only ever run one instance" | Cannot tell from the code | ARCH-04 decision of 2026-10-20 added a second instance | Conflict: which is true? |
+| QUAL-02 | Keep the two export helpers, 2026-07-15 | They change for different reasons | Still holds | none | Keep |
+
+Record the developer's answer for each (kept, reversed, or updated) with the date, here and in `.audit/accepted.md`. One they do not answer stays in force, marked "carried forward, not reconfirmed".
 
 ## 5. Advisory Notes
 Judgment findings from Pass 4. For each: the checklist ID, location, the issue, the concrete simpler alternative, and its rough diff size. These never count against the verdict; the developer may promote any into the queue as P2.
@@ -196,7 +206,7 @@ When the audit is complete, show this in the conversation, in this order. It is 
 
    The row above is a format example only. "What is wrong" is one plain sentence a developer outside the project would understand. "Evidence" names the kind of proof and its key fact: the tool and what it reported, the trace's source and sink, the failing test, or the measurement.
 4. **Not proven yet:** every Probable and Unverified item, with its ID, what was seen, and the step that would settle it.
-5. **Waiting on you:** every Decision Needed and every question only the developer can answer, each with the choice or fact needed.
+5. **Waiting on you:** every Decision Needed and every question only the developer can answer, each with the choice or fact needed. Then **your earlier decisions**, as the table from section 4: each one with what the code says now, any conflict with another decision, and a keep or reconsider recommendation, Reconsider and conflicts first.
 6. **Not checked:** any files or areas that were not examined and why, tools that were missing or skipped, checks that did not happen, and technologies checked only against the general checklists.
 7. **Where the full report is:** the path to `code-health-report.md`, and one line saying that nothing has been changed and nothing will be planned or fixed until they ask.
 

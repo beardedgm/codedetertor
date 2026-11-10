@@ -158,7 +158,8 @@ Write it as one line with the evidence behind it, for example: "Standard met: 38
 - **Test the premise against the code.** If the code now contradicts the recorded reason (the "invite-only beta" has public signup, the "admin-only" endpoint is reachable by users), re-open the item as a Finding or a Decision Needed, with the evidence.
 - **Speak up when there is a reason to.** Whenever you have concrete evidence that reversing a decision would better meet the standard (the risk is larger than the reason assumed, a cheaper or cleaner fix now exists, the surrounding code or context changed, or a new advisory or standard applies), raise a **Reconsider** recommendation in Decisions Needed: the decision and its date, what changed, the evidence, the fix and its rough cost. Never hold back a real problem because a decision exists.
 - **Do not re-argue without a reason.** A decision with no new evidence against it carries forward quietly, so audits do not go in circles over settled choices.
-- **Reconfirm on a schedule.** At the start of each new audit (not on a resume), ask one grouped question listing every carried-forward decision with its date and reason, Reconsider recommendations first, so the developer can keep, reverse or review each. Include always: any item that would otherwise be P0 or P1, and any decision older than six months. If there is no answer, keep the decisions but mark them "carried forward, not reconfirmed".
+- **Check decisions against each other.** Read the accepted decisions as a set, together with the developer's context notes and the decisions made in this run. When two of them cannot both be true, or a later decision removes the reason for an earlier one (an item was accepted because "we only ever run one instance", and a later decision added a second), record both as a conflict and ask which is true. Never settle a conflict by guessing which one the developer meant.
+- **Review them in the final report, with the evidence.** Do not ask about earlier decisions before the audit: at the start there is nothing yet to show. The final report lists every carried-forward decision under Decisions Needed with its date and reason, what the code says now (the reason still holds, the code contradicts it, or it cannot be told), any conflict with another decision, and a recommendation to keep or reconsider, with Reconsider recommendations and conflicts first. In the decision step the developer keeps, reverses or updates each one; record the answer and the date in `.audit/accepted.md`. A decision they do not answer stays in force, marked "carried forward, not reconfirmed".
 - **Show what rests on old decisions.** In the verdict and Checklist Coverage, separate Accepted items reconfirmed this audit from those carried forward unconfirmed.
 
 Only an audit can confirm **Standard met**. When fixing empties the queue of a complete audit, the verdict becomes "All findings fixed through commit `<hash>`; run `/codedetective new` to confirm the standard is met", because fixes change code the audit never saw. A fresh run that confirms nothing is what earns the verdict.
@@ -171,7 +172,7 @@ Work in phases and append to the report after each, so progress survives if cont
 - **A question you cannot answer from the repository and cannot continue without.** Ask it on its own, with no offers attached, then carry on. Anything that can wait (a business choice, a fact only the developer knows) is recorded as a Decision Needed or an Unverified item and asked after the report is presented.
 - **Context running low.** Stop cleanly at the end of the current pass, say which pass is next, and ask only whether to continue. Running `/codedetective` again resumes there.
 
-The setup questions asked before Phase 0 (network tools, a stale run, earlier decisions to reconfirm) are part of starting, not a pause in the audit.
+The setup questions asked before Phase 0 (network tools, a stale run) are part of starting, not a pause in the audit. Earlier decisions are not a setup question: they are reviewed in the final report, where the evidence is.
 
 **Every audit covers the whole repository.** A run examines the entire codebase from beginning to end, as if for the first time, whether it is the first audit or the tenth. Never narrow an audit to files changed since an earlier run, to recent commits or pull requests, or to areas where earlier audits found problems, and never skip an area because an earlier run passed it. Do not use `git log`, `git diff` or an earlier report to choose what to examine. The only use of an earlier run is the "Since last audit" comparison, written after Pass 4 from findings this run verified on its own.
 
@@ -200,7 +201,7 @@ Write the report using the structure and task schema in `references/report-templ
 1. The verdict line and the counts.
 2. **Every queued task**, grouped P0, then P1, then P2: its ID, what is wrong in plain words, where it is, and the evidence that proves it. Never cut the list down to highlights or "top findings"; the developer is deciding what to fix and needs all of it. Full traces and tool excerpts stay in the report file.
 3. Probable and Unverified items, each with what would settle it.
-4. Decisions Needed and the questions only the developer can answer.
+4. Decisions Needed and the questions only the developer can answer, then every earlier decision with what the code says now.
 5. What was not checked, and why.
 6. The path to the report file.
 
@@ -216,6 +217,7 @@ Tell the user in one line that they can also reply with corrections. Choosing op
 - **Questions only they can answer** (see "Closing the gaps that code cannot"), asked as one grouped question.
 - **Decisions Needed.** Each answer becomes a queued task or an Accepted item with their reason.
 - **Findings they choose not to fix.** Recorded as Accepted with their reason; the task leaves the queue.
+- **Earlier decisions.** For each one the report lists, they keep it, reverse it or update its reason, and say which side of any conflict is true. A reversed decision becomes a queued task, or a Decision Needed if its fix depends on a choice. Update `.audit/accepted.md` with the outcome and today's date.
 
 Recompute the verdict after their answers and say what changed. Planning covers only what is still in the queue.
 
