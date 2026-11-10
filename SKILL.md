@@ -60,14 +60,14 @@ The **current run** is the one named in `.audit/current-run`; if that file is mi
 | `/codedetective fix <TASK-ID>` | Plan that one task, get approval, then execute it. Complete runs only, like every `fix` form. |
 | `/codedetective fix` (no ID), or `next` | Plan and execute the next eligible task in queue order. |
 | `/codedetective fix batch <name>` | Build every task in an approved batch plan back to back, P2 tasks only, stopping at the first problem. See Batch fixing. |
-| `/codedetective status` | Summarize the current run's verdict, progress, counts by tier, and queue state, and list past runs with their verdicts. Change nothing. |
+| `/codedetective status` | Summarize the current run's verdict, progress, counts by tier, and queue state, and list past runs with their verdicts. End by naming the next step and its command. Change nothing. |
 
 `status` works on the current run at any time. `plan` and `fix` work only on a complete run, because the developer is promised the whole audit and its full report before any change is discussed. If either is invoked while the current run is unfinished, change nothing: say the audit has to finish first and how far it has got, and ask whether to continue it. There is no override, including for a serious finding. Fixing a run's queue can take days; starting a new run makes the new one current, and the old queue stays in history.
 
 **Runs in an older report format.** Before resuming, fixing, planning or reporting status on a run, compare its report with the current structure in `references/report-template.md`. If it is missing sections (for example the verdict line, Decisions Needed, Since Last Audit or Checklist Coverage), add them once, in place, before doing anything else. Do not redo finished passes to do it:
 - Fill Checklist Coverage from what the report already records: findings and tasks become Finding, recorded safeguards become Passed, recorded not-applicable items become Not Applicable. Any gated item in a finished pass that the old report never recorded an outcome for becomes Unverified ("not recorded in this run's format"); never guess an outcome. Items in passes not yet run stay empty.
 - Create `.audit/accepted.md` if it does not exist, and move into it any decisions or won't-fix choices the developer already made in the old report, with their reasons.
-- Add any missing task fields (`CHECK_ID`, `PLAN`, `VERIFIER`) from what the task already says, leaving a field as "not recorded" rather than inventing it.
+- Add any missing task fields (`CHECK_ID`, `PLAN`, `VERIFIER`, `DELIVERY`) from what the task already says, leaving a field as "not recorded" rather than inventing it.
 - If the report has no Codebase Coverage section, add one that says coverage was not recorded by the version that ran the audit, with a single `COV-all` row marked Unverified. Do not reconstruct coverage from memory.
 - Compute the verdict from the result, and record in the Progress section that the report was upgraded, on what date, and how many items were marked Unverified because the old format never recorded them.
 Say in one line that the report was upgraded. If the upgrade leaves items Unverified that matter, offer to re-run just the pass that covers them.
@@ -225,7 +225,7 @@ Tell the user in one line that they can also reply with corrections. Choosing op
 - **Findings they choose not to fix.** Recorded as Accepted with their reason; the task leaves the queue.
 - **Earlier decisions.** For each one the report lists, they keep it, reverse it or update its reason, and say which side of any conflict is true. A reversed decision becomes a queued task, or a Decision Needed if its fix depends on a choice. Update `.audit/accepted.md` with the outcome and today's date.
 
-Recompute the verdict after their answers and say what changed. Planning covers only what is still in the queue.
+Recompute the verdict after their answers and say what changed. Planning covers only what is still in the queue. End the decision step with a question: **Plan the fixes** (`/codedetective plan`), or **Stop**.
 
 ## Planning
 
@@ -243,7 +243,7 @@ Plans are where the user reviews a fix before any code changes, so a plan must b
 1. Select the tasks and add any unfinished prerequisites they depend on, marking which were pulled in.
 2. Order them by prerequisites first, then priority.
 3. Read the current code for every task, then write one plan: the build order, a short per-task plan, and a section on interactions between tasks (shared files or symbols, an order that matters, one fix that changes what another must do, combined risk).
-4. On approval, save it and mark every included task Planned. Then stop and ask, multiple choice when available: build the first task now, build the whole batch now (only when every task in it is P2; see Batch fixing), or stop. Approving a batch plan approves the approach, not the edits; each task is built in its own `fix` run with its own review stop, except a P2-only batch the user chooses to run with `fix batch`.
+4. On approval, save it and mark every included task Planned. Then stop and ask, multiple choice when available and with the command beside each choice: build the first task now (`/codedetective fix <TASK-ID>`), build the whole batch now (`/codedetective fix batch <name>`, only when every task in it is P2; see Batch fixing), or stop. Approving a batch plan approves the approach, not the edits; each task is built in its own `fix` run with its own review stop, except a P2-only batch the user chooses to run with `fix batch`.
 
 **Drift check before building a planned task.** Earlier fixes change the code a later plan was written against. Before building a task that already has an approved plan, re-read its targets and compare. The plan is still valid unless there is a material change: a target symbol moved, was renamed or was deleted; the approach no longer fits; the fix now needs files beyond the plan; the regression test cannot be written as planned; or a dependency would be added. With no material change, say in one line that the approved plan still holds and build it. With a material change, enter plan mode again for that task and get a fresh approval.
 
@@ -255,24 +255,45 @@ Plans are where the user reviews a fix before any code changes, so a plan must b
 4. Take a snapshot before writing any code: run `node "${CLAUDE_SKILL_DIR}/scripts/check-diff.mjs" --snapshot` and record the ID in the task. It captures the working tree as it is, including the developer's own uncommitted edits and earlier fixes, so the diff check judges only this fix's changes.
 5. Before adding any helper or abstraction, search for an existing equivalent and reuse it. A new abstraction needs at least two real call sites.
 6. Never add or upgrade a dependency without the user's explicit approval and a check that the exact package name exists in the registry with a credible history. Never install a package name you proposed yourself without that confirmation; AI-suggested package names are sometimes invented, and attackers register them.
-7. Where feasible, write or update a focused regression test that fails before the fix. For preventive or structural work where nothing can be reproduced, state how the fix is verified.
+7. Where feasible, write or update a focused regression test that fails before the fix, and run it before building the fix to see it fail; a test never seen failing proves nothing. For preventive or structural work where nothing can be reproduced, state how the fix is verified.
 8. Build what the approved plan says, and keep the diff to it, roughly a handful of files. If the work turns out to need a material departure from the plan, stop and re-plan rather than improvise. Formatting or style changes go in their own task, never mixed with behavior changes.
-9. Run the task's verification commands under the same isolation rules as reconnaissance.
+9. Run the task's verification commands under the same isolation rules as reconnaissance, after the last edit to the code. A failing command means the fix is not finished: find the cause, or stop and report the blocker. Never mark a task done over a failure.
 10. Run `node "${CLAUDE_SKILL_DIR}/scripts/check-diff.mjs" --base <snapshot ID>`, adding `--allow <file>` for each config file the approved plan names. It fails if this fix adds test skips or focus markers, a suppression comment without a written reason (`@ts-ignore` and `@ts-nocheck` always fail), disabled TLS checks, `--no-verify`, a deleted test file or a test moved out of the test paths, or an unplanned change to a config file that can switch checks off. It flags for review a suppression with a written reason, removed assertions, empty catch blocks and manifest changes; each needs a stated justification in the task. A failure means the fix is rejected: undo only this fix's offending change (never anything that was in the snapshot) and find a real fix, or stop and report the blocker.
 11. Rerun the evidence script with `--out .audit/runs/<run-id>/evidence/after-<TASK-ID> --compare <the previous evidence folder>`, so the baseline that findings cite is never overwritten, and record the change table in the task. A fix that makes a count worse needs a stated reason.
-12. Mark the task done in the report with its verification results, recompute the verdict, then stop and ask the user to review before the next task. When this was the last open task, say so and offer `/codedetective new` to confirm the standard is met. End with a question, multiple choice when available: fix the next task, or stop. Name the next task in the option.
+12. Mark the task done only when it is proven (see "Proof of done"), record the verification results in the report, and recompute the verdict. Then stop, show the proof, and ask the user to review before the next task. End with the next-step question (below).
+
+**Proof of done.** A task is Done only when all of this is true, and you saw each result yourself in this session, after the last edit to the code:
+- every verification command in the task ran and passed;
+- the regression test failed before the fix and passes after it, or, where no test is feasible, the stated way of verifying the fix was carried out;
+- the diff check has no FAIL, and every REVIEW item has a written justification;
+- the evidence rerun shows no count made worse without a stated reason;
+- the task's done criteria are met.
+
+If any of these is missing, the task is not Done: keep working on it, or mark it `Blocked: <reason>` and report it. Never report a result from memory, from an earlier run, or from what the change ought to do: run it again. If a check could not be run (a service that is not available locally, a missing tool), say which one and why, and mark the task `Blocked: could not verify <check>` so the developer decides; do not call it done.
+
+At the review stop, show the proof in the conversation, not just a statement that it passed: each command with its result (pass and fail counts or exit status, and the lines of output that matter), the regression test's result before and after the fix, the diff check result, and the evidence change table. Keep it short, and never print a secret.
 
 **Batch fixing (P2 only).** Hygiene work like dead exports or duplication can run to dozens of tasks, and a review stop after each costs more than it protects. `/codedetective fix batch <name>` builds every task in an approved batch plan back to back:
 - Only P2 tasks, under a batch plan the user approved. P0 and P1 tasks always get their own fix run and review stop.
 - Each task still goes through every remediation step: drift check, its own snapshot, regression test where feasible, verification commands, diff check and evidence rerun.
 - Stop at the first failing test, diff check FAIL, material drift from the plan, new dependency, or anything the plan did not cover, and report which task stopped and why. Earlier tasks in the batch stay done.
 - REVIEW items from the diff check are justified in each task as usual and listed together at the end.
-- End with one review stop covering the whole batch: each task's result, the combined evidence change, and the REVIEW items.
+- End with one review stop covering the whole batch: each task's result with its proof, the combined evidence change, and the REVIEW items, then the next-step question.
 
 **Never weaken security or test integrity to make a check pass.** That includes hardcoding tokens or credentials, disabling TLS verification, commenting out or bypassing auth middleware, skipping or deleting tests, loosening assertions, adding suppression comments, bypassing git hooks, and catching and swallowing errors. These shortcuts convert a visible problem into an invisible one. If a task cannot pass without one of them, stop and report the blocker.
 
 Never commit, push, deploy or open a pull request unless the user asks for it.
 
+**When the user asks for a commit, pull request or merge.** Do exactly what they asked (commit, push, open a pull request, merge, or wait for CI and then merge), then come back to the run instead of stopping there. Say what happened: the commit, the pull request number, and whether it merged or what is blocking it. Record it in the `DELIVERY` field of each task it covers. Then end with the next-step question. While the run has open tasks, a git or pull request action is never the end of the conversation. If CI fails or the merge is blocked, report that and ask; never weaken a check to get it through.
+
+**The next-step question.** Every stop during planning and remediation ends by saying where the queue stands and asking what to do next, so the developer is never left to work out how to continue. Say how many tasks are open at each priority and which of them have an approved plan. If a priority level or an approved plan was just finished, say so plainly ("All P0 tasks are done"). Then build the options from the state of the run, multiple choice when available, and name the command beside each one so it can be chosen now or typed in a later session:
+- **A task with an approved plan is waiting:** offer **Fix the next task** (`/codedetective fix <TASK-ID>`), naming the task.
+- **Open tasks remain and none has an approved plan:** offer **Plan the next fixes** (`/codedetective plan <P1|P2>`), naming the highest priority that still has open tasks, and **Plan and fix only the next task** (`/codedetective fix`). Planning comes first: never offer to build a task that has no approved plan.
+- **The queue is empty:** say that every finding is fixed, and offer **Run a new audit to confirm the standard is met** (`/codedetective new`).
+- **Always:** **Stop**.
+
+Mention in one line any finished fix that is still uncommitted or sits in an open pull request, without committing or merging it unasked. Choosing an option counts as invoking that command. Anything else, including silence, means stop.
+
 ## Talking to the user
 
-The end of the audit is the one stop that is not a summary: present the full report as described under "End of the audit". At every other stop, give a short spoken-style summary: which run you are working in (and whether it is new or resumed), where things stand (for example "Pass 2 of 4 done" at a pause, or the task just finished), the current verdict, what changed since the last stop, any Decisions Needed that are waiting on the user, and what comes next, pointing to the report file for detail. End every stop with a question offering the next steps, never just a list of commands to type. Say plainly what was not checked and why; the user needs to know the gaps as much as the findings.
+The end of the audit is the one stop that is not a summary: present the full report as described under "End of the audit". At every other stop, give a short spoken-style summary: which run you are working in (and whether it is new or resumed), where things stand (for example "Pass 2 of 4 done" at a pause, or the task just finished), the current verdict, what changed since the last stop, any Decisions Needed that are waiting on the user, and what comes next, pointing to the report file for detail. End every stop with a question offering the next steps, with the command named beside each choice. Never end with just a list of commands to type, and never end a stop with no next step at all. During planning and remediation, that question is the next-step question (see Remediation). Say plainly what was not checked and why; the user needs to know the gaps as much as the findings.
