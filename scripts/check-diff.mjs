@@ -45,7 +45,13 @@ function snapshotTree() {
   try {
     const hasHead = spawnSync('git', ['rev-parse', '--verify', '-q', 'HEAD'], { cwd: root }).status === 0;
     git(hasHead ? ['read-tree', 'HEAD'] : ['read-tree', '--empty'], env);
-    git(['add', '-A', '--', '.', ':(exclude).audit'], env);
+    // Add everything git would track, then drop .audit from this throwaway index. Never name .audit in
+    // an exclude pathspec on `git add`: when .audit is git-ignored, which is how the skill sets a project
+    // up, git refuses with "paths are ignored by one of your .gitignore files". Ignored files are skipped
+    // by `git add` anyway; the `git rm --cached` covers a .audit that is not ignored or was committed.
+    // --cached only touches the index, and this index is the temporary one, so no file is deleted.
+    git(['add', '-A', '--', '.'], env);
+    git(['rm', '-r', '-q', '-f', '--cached', '--ignore-unmatch', '--', '.audit'], env);
     return git(['write-tree'], env).trim();
   } finally {
     fs.rmSync(index, { force: true });

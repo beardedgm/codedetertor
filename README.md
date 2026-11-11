@@ -71,7 +71,7 @@ To update a cloned install, run `git pull` inside that folder.
 
 | Tool | What it proves | How to get it |
 |---|---|---|
-| `typescript` (tsc) | Type errors. Needs a `tsconfig.json` or `jsconfig.json`; `checkJs` covers plain JavaScript. | Dev dependency |
+| `typescript` (tsc) | Type errors. Needs a `tsconfig.json` or `jsconfig.json`, at the root or up to two folders down; `checkJs` covers plain JavaScript. | Dev dependency |
 | `eslint` | Lint health, and function complexity if a complexity rule such as `eslint-plugin-sonarjs` is enabled. Needs an ESLint config. | Dev dependency |
 | `knip` | Dead code and unused dependencies | Dev dependency |
 | `madge` | Circular imports | Dev dependency |
@@ -303,7 +303,7 @@ When you ask it to commit, open a pull request, or merge (including "merge when 
 
 - **The full report comes first.** The audit runs all four passes and shows you everything it found before any fix is planned or offered. `plan` and `fix` refuse to run on an unfinished audit.
 - **Nothing changes without an approved plan.** Every fix is planned and approved before code is touched, and stops for review after.
-- **Read-only investigation.** No edits, installs, fixers, migrations or seeds during the audit. It writes only inside `.audit/`, which it hides from git through `.git/info/exclude`, and analyzers never count anything under `.audit/` as part of your code.
+- **Read-only investigation.** No edits, installs, fixers, migrations or seeds during the audit. It writes only inside `.audit/`, which it hides from git through `.git/info/exclude`, and analyzers never count anything under `.audit/` as part of your code. One thing it may ask you about: Prettier does not read that git file, so if your project uses Prettier, the tool check offers to add the line `.audit/` to `.prettierignore`. It makes that change only if you say yes.
 - **Secrets stay hidden.** It checks configuration by variable name only and never prints values. Secret scan results report location and type, never the secret.
 - **Nothing touches production.** Tests, builds and measurement scripts run only after it confirms that every database is local or in-memory and every third-party service is mocked. Anything it cannot confirm, it skips and reports.
 - **No cheating to go green.** It will not hardcode credentials, bypass auth, skip or delete tests, loosen assertions, suppress lint or type errors, bypass git hooks, or swallow errors. If a fix cannot pass without one of those, it stops and tells you.
@@ -331,6 +331,8 @@ A few details worth knowing:
 - **Saved evidence never holds your code.** ESLint's saved output keeps where each problem is and what it is, not the file's source; duplicated code blocks are dropped from the jscpd report; and long key-like values quoted in error messages are redacted. A secret in your code cannot reach the transcript through the evidence files.
 - **Each check says whether it really ran.** Only `ran` counts as a complete check. `partial` means the findings are real but a zero proves nothing for what was skipped. Anything else (skipped, missing, error, timeout) means the check did not happen, and the items that rely on it stay Unverified.
 - **Project references are followed.** The type check checks every project a solution-style `tsconfig.json` points to, such as the default Vite layout. If it ends up checking zero files, it says so, rather than reporting zero errors. In a monorepo whose composite projects have not been built, it reports the check as `partial` instead of counting "not built" as type errors.
+- **Type-check configs below the root are found.** It looks for `tsconfig.json` or `jsconfig.json` at the root and up to two folders down (`client/`, `shared/`, `packages/api/`), and uses the TypeScript compiler installed nearest each one. ESLint, knip and the vulnerability audit still look only at the repository root.
+- **The duplication check follows your config.** If the project has a `.jscpd.json` (or a `jscpd` section in `package.json`), jscpd scans exactly what that config says. Otherwise it scans the repository with tests and fixtures left out. It works with jscpd 4 and 5.
 - **Ignored files are not scanned.** Anything your `.gitignore` excludes, such as a Python `.venv` or a Rust `target` folder, is left out, so installed packages never show up as your findings.
 - **Build output can be secret-scanned.** Pass `--scan-dir dist` after a local build. gitleaks scans it with values redacted, so a found secret is never printed.
 - **Non-JavaScript code is partly covered.** The built-in scan for suppressions and skipped tests also covers Python, Go, Rust and several other languages. If it finds no source files at all, it reports "not applicable", not a clean result.
@@ -355,7 +357,10 @@ references/
 scripts/
   collect-evidence.mjs          Read-only analyzer runner
   check-diff.mjs                Rejects fixes that weaken tests or add suppressions
+  self-test.mjs                 Checks both scripts against throwaway repositories
 ```
+
+To check the two scripts on your own machine, with your own git and Node versions, run `node scripts/self-test.mjs` from the skill's folder. It builds throwaway repositories set up the way the skill really sets a project up, runs the scripts against them, and removes them. It needs only Node and git.
 
 ## Using it outside Claude Code
 

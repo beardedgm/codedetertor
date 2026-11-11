@@ -28,6 +28,7 @@ The developer can drop this at `.audit/context.md` to sharpen the investigation.
 - Areas out of scope:
 - Network tools allowed (public vulnerability databases): <yes | no>
 - Audit without these tools (the developer's choice, with the date): <tool names, or "none">
+- `.audit/` added to `.prettierignore` (asked once, only when the project uses Prettier): <yes | no | not needed>
 ```
 
 ---

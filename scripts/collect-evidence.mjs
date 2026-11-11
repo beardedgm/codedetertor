@@ -68,9 +68,18 @@ const inAudit = (p) => typeof p === 'string' && AUDIT_PATH.test(path.isAbsolute(
 const exists = (p) => fs.existsSync(path.join(root, p));
 const firstExisting = (list) => list.find(exists);
 
-function findBin(name) {
-  const local = path.join(root, 'node_modules', '.bin', name + (isWin ? '.cmd' : ''));
-  if (fs.existsSync(local)) return local;
+// Looks in node_modules/.bin from `fromDir` up to the repository root (a tool may be installed in a
+// sub-package such as client/ or shared/), then on PATH.
+function findBin(name, fromDir = root) {
+  const file = name + (isWin ? '.cmd' : '');
+  let dir = path.resolve(fromDir);
+  if (dir !== root && !dir.startsWith(root + path.sep)) dir = root;
+  for (;;) {
+    const local = path.join(dir, 'node_modules', '.bin', file);
+    if (fs.existsSync(local)) return local;
+    if (dir === root) break;
+    dir = path.dirname(dir);
+  }
   const exts = isWin ? ['.exe', '.cmd', '.bat', ''] : [''];
   for (const dir of (process.env.PATH || '').split(path.delimiter)) {
     for (const ext of exts) {
@@ -82,6 +91,29 @@ function findBin(name) {
   }
   return null;
 }
+
+// Config files often live below the repository root (client/, server/, shared/, packages/*). Returns the
+// first of `names` found in the root and in each folder up to `maxDepth` levels down, skipping hidden,
+// dependency and build folders. Paths are relative to the root, with forward slashes.
+function findConfigs(names, maxDepth = 2) {
+  const found = [];
+  const visit = (rel, depth) => {
+    const hit = names.find((n) => exists(rel ? `${rel}/${n}` : n));
+    if (hit) found.push(rel ? `${rel}/${hit}` : hit);
+    if (depth >= maxDepth) return;
+    let entries;
+    try { entries = fs.readdirSync(path.join(root, rel), { withFileTypes: true }); } catch { return; }
+    for (const e of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      // Test fixtures often carry their own config for a deliberately broken sample project.
+      if (!e.isDirectory() || e.isSymbolicLink() || e.name.startsWith('.') || SKIP_DIRS.has(e.name) || /^(__)?fixtures(__)?$|^__mocks__$/.test(e.name)) continue;
+      visit(rel ? `${rel}/${e.name}` : e.name, depth + 1);
+    }
+  };
+  visit('', 0);
+  return found;
+}
+const TS_CONFIG_NAMES = ['tsconfig.json', 'jsconfig.json'];
+const tscFor = (config) => findBin('tsc', path.dirname(path.resolve(root, config)));
 
 function run(bin, args) {
   const useShell = isWin && /\.(cmd|bat)$/i.test(bin);
@@ -187,10 +219,12 @@ if (preflight) {
 
   const jsFiles = ['.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.mts', '.cts', '.vue', '.svelte'].reduce((n, e) => n + (extCounts[e] || 0), 0);
   if (pkg || jsFiles) {
-    const tsConfig = firstExisting(['tsconfig.json', 'jsconfig.json']);
+    // Same discovery as the real run: configs at the root or up to two folders down, compiler nearest each.
+    const tsConfigs = findConfigs(TS_CONFIG_NAMES);
+    const tsBin = tsConfigs.some(tscFor) || Boolean(findBin('tsc'));
     const needConfig = 'add a tsconfig.json or jsconfig.json (checkJs covers plain JavaScript)';
-    if (findBin('tsc')) add('tsc', tsConfig ? 'installed' : 'not set up', proves('tsc'), tsConfig ? '' : needConfig);
-    else add('tsc', 'missing', proves('tsc'), `${install('typescript')}${tsConfig ? '' : `, then ${needConfig}`}`);
+    if (tsBin) add('tsc', tsConfigs.length ? 'installed' : 'not set up', proves('tsc'), tsConfigs.length ? `will check ${tsConfigs.join(', ')}` : needConfig);
+    else add('tsc', 'missing', proves('tsc'), `${install('typescript')}${tsConfigs.length ? '' : `, then ${needConfig}`}`);
 
     const eslintConfig = firstExisting(ESLINT_CONFIGS) || (pkg && pkg.eslintConfig);
     if (findBin('eslint')) add('eslint', eslintConfig ? 'installed' : 'not set up', proves('eslint'), eslintConfig ? '' : 'add an ESLint configuration file');
@@ -207,7 +241,8 @@ if (preflight) {
     notes.push('No JavaScript or TypeScript here, so tsc, eslint, knip and madge do not apply.');
   }
 
-  add('jscpd', findBin('jscpd') ? 'installed' : 'missing', proves('jscpd'), findBin('jscpd') ? '' : install('jscpd'));
+  const jscpdConfig = exists('.jscpd.json') ? '.jscpd.json' : pkg && pkg.jscpd ? 'package.json "jscpd"' : null;
+  add('jscpd', findBin('jscpd') ? 'installed' : 'missing', proves('jscpd'), findBin('jscpd') ? (jscpdConfig ? `will scan what the project's ${jscpdConfig} says` : '') : install('jscpd'));
   add('gitleaks', findBin('gitleaks') ? 'installed' : 'missing', proves('gitleaks'), findBin('gitleaks') ? '' : platformHint('winget install -e --id Gitleaks.Gitleaks', 'brew install gitleaks', 'see https://github.com/gitleaks/gitleaks#installing'));
 
   const networkNote = 'runs only if you allow network tools';
@@ -235,6 +270,16 @@ if (preflight) {
   }
   if ((extCounts['.java'] || 0) + (extCounts['.kt'] || 0)) {
     notes.push("Java or Kotlin files found. The audit uses the build's own check task; see references/tools-by-language.md.");
+  }
+
+  // The project's own format check scans the whole tree unless told otherwise, and Prettier does not read
+  // .git/info/exclude, which is where the skill hides .audit/.
+  const ignoresAudit = (file) => exists(file) && /^\s*\/?\.audit\/?\s*$/m.test(fs.readFileSync(path.join(root, file), 'utf8'));
+  const allDeps = pkg ? { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) } : {};
+  const usesPrettier = Boolean(allDeps.prettier || (pkg && pkg.prettier) || /prettier/.test(JSON.stringify((pkg && pkg.scripts) || {}))
+    || ['.prettierrc', '.prettierrc.json', '.prettierrc.yml', '.prettierrc.yaml', '.prettierrc.js', '.prettierrc.cjs', '.prettierrc.mjs', 'prettier.config.js', 'prettier.config.cjs', 'prettier.config.mjs'].some(exists));
+  if (usesPrettier && !ignoresAudit('.prettierignore') && !ignoresAudit('.gitignore')) {
+    notes.push("Prettier is used here and `.audit/` is not in `.prettierignore` or `.gitignore`, so the project's format check will fail on the audit's own files. The fix is one line, `.audit/`, in `.prettierignore`.");
   }
 
   const gitFound = Boolean(findBin('git'));
@@ -265,34 +310,39 @@ function record(tool, status, extra = {}) {
 // Solution-style configs ("files": [] plus "references", the default Vite layout) check nothing with -p,
 // so every referenced project is expanded and checked on its own. Build info goes to a temp folder,
 // never into the repository. A run that checked zero project files is reported as such, never as 0 errors.
+// Configs are looked for at the root and up to two folders down, so a project whose only config is
+// shared/tsconfig.json or client/jsconfig.json is still checked.
 (() => {
-  const config = firstExisting(['tsconfig.json', 'jsconfig.json']);
-  if (!config) return record('tsc', 'skipped', { reason: 'no tsconfig.json or jsconfig.json' });
-  const bin = findBin('tsc');
-  if (!bin) return record('tsc', 'missing');
+  const configs = findConfigs(TS_CONFIG_NAMES);
+  if (!configs.length) return record('tsc', 'skipped', { reason: 'no tsconfig.json or jsconfig.json at the root or up to two folders down' });
+  if (!configs.some(tscFor)) return record('tsc', 'missing');
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'codedetective-tsc-'));
   const projects = [];
   const seen = new Set();
-  const addProject = (cfgPath) => {
+  const noCompiler = [];
+  // Each project uses the compiler nearest to it; a referenced project falls back to its parent's.
+  const addProject = (cfgPath, fallbackBin) => {
     const abs = path.resolve(root, cfgPath);
     if (seen.has(abs) || inAudit(abs)) return;
     seen.add(abs);
-    projects.push(abs);
+    const bin = tscFor(abs) || fallbackBin;
+    if (!bin) { noCompiler.push(path.relative(root, abs)); return; }
+    projects.push({ path: abs, bin });
     const shown = tryJson(run(bin, ['--showConfig', '-p', abs]).stdout) || {};
     for (const ref of shown.references || []) {
       let refPath = path.resolve(path.dirname(abs), ref.path || '');
       if (fs.existsSync(refPath) && fs.statSync(refPath).isDirectory()) refPath = path.join(refPath, 'tsconfig.json');
-      if (fs.existsSync(refPath)) addProject(refPath);
+      if (fs.existsSync(refPath)) addProject(refPath, bin);
     }
   };
-  addProject(config);
+  configs.forEach((c) => addProject(c, null));
 
   const projectFile = (f) => f && !/[\\/]node_modules[\\/]/.test(f) && !/[\\/]lib\.[^\\/]*\.d\.ts$/.test(f) && !inAudit(f);
   const checkedFiles = new Set();
   const kept = new Set();
   const perProject = [];
   let timedOut = false;
-  projects.forEach((proj, i) => {
+  projects.forEach(({ path: proj, bin }, i) => {
     const listed = run(bin, ['--listFilesOnly', '-p', proj]).stdout.split(/\r?\n/).map((s) => s.trim()).filter(projectFile);
     listed.forEach((f) => checkedFiles.add(path.resolve(f)));
     perProject.push({ project: path.relative(root, proj), files: listed.length });
@@ -328,6 +378,12 @@ function record(tool, status, extra = {}) {
     return record('tsc', timedOut ? 'timeout' : 'partial', {
       file, counts, projects: perProject,
       reason: 'referenced projects are not built (TS6305), so imports across project references were not type-checked; those errors are real, but a zero proves nothing for cross-project types',
+    });
+  }
+  if (noCompiler.length) {
+    return record('tsc', timedOut ? 'timeout' : 'partial', {
+      file, counts, projects: perProject,
+      reason: `no TypeScript compiler was found for ${noCompiler.join(', ')}, so those projects were not type-checked`,
     });
   }
   record('tsc', timedOut ? 'timeout' : 'ran', { file, counts, projects: perProject });
@@ -414,43 +470,66 @@ function record(tool, status, extra = {}) {
 })();
 
 // 5. Duplication
+// Two things differ between installs, and getting either wrong breaks the check:
+// - jscpd 5 honours .gitignore by default and rejects --gitignore; jscpd 4 needs the flag.
+// - When the project has its own jscpd config, that config decides what is scanned. A path or an ignore
+//   list on the command line overrides it, which makes jscpd scan the whole repository (data files included).
 (() => {
   const bin = findBin('jscpd');
   if (!bin) return record('jscpd', 'missing');
   const reportDir = path.join(outDir, 'jscpd');
-  const r = run(bin, [
-    '--min-tokens', '50',
-    '--reporters', 'json',
-    '--output', reportDir,
-    '--gitignore',
-    '--ignore', [
+  const major = Number((run(bin, ['--version']).stdout.match(/(\d+)\.\d+\.\d+/) || [])[1]) || null;
+  const pkg = exists('package.json') ? tryJson(fs.readFileSync(path.join(root, 'package.json'), 'utf8')) || {} : {};
+  const projectConfig = exists('.jscpd.json') ? '.jscpd.json' : pkg.jscpd ? 'package.json "jscpd"' : null;
+  const args = ['--reporters', 'json', '--output', reportDir, '--silent'];
+  if (!projectConfig) {
+    args.push('--min-tokens', '50');
+    if (major !== null && major < 5) args.push('--gitignore');
+    args.push('--ignore', [
       '**/node_modules/**', '**/dist/**', '**/build/**', '**/.audit/**', '**/coverage/**', '**/*.min.js', '**/package-lock.json',
       '**/.venv/**', '**/venv/**', '**/site-packages/**', '**/__pycache__/**', '**/target/**', '**/vendor/**',
       // Repeated setup in tests and fixtures is normal; QUAL-02 counts production duplication only.
       '**/__tests__/**', '**/__mocks__/**', '**/__fixtures__/**', '**/fixtures/**', '**/*.test.*', '**/*.spec.*', '**/test_*.py', '**/*_test.go',
-    ].join(','),
-    '--silent',
-    '.',
-  ]);
+    ].join(','), '.');
+  }
+  const r = run(bin, args);
+  const scope = projectConfig ? `the project's ${projectConfig}` : 'skill defaults (whole repository, tests and fixtures left out)';
   const reportFile = path.join(reportDir, 'jscpd-report.json');
   const data = fs.existsSync(reportFile) ? tryJson(fs.readFileSync(reportFile, 'utf8')) : null;
   if (!data) {
     // Never keep a report that could not be parsed: it may hold copied code.
     fs.rmSync(reportDir, { recursive: true, force: true });
-    const file = save('jscpd-error.txt', redact(r.stderr || '(no error output)'));
-    return record('jscpd', 'error', { exit: r.code, file, reason: 'no JSON report produced; see file' });
+    const file = save('jscpd-error.txt', redact(r.stderr || r.stdout || '(no error output)'));
+    return record('jscpd', 'error', { exit: r.code, file, version: major, scope, reason: 'no JSON report produced; see file' });
   }
-  // The report copies each duplicated block of code (fragment) and may include blame data: keep locations only.
-  for (const d of data.duplicates || []) {
-    delete d.fragment;
-    for (const side of [d.firstFile, d.secondFile]) if (side) delete side.blame;
-  }
+  // The report copies duplicated code and may include blame data. Keep locations only: drop the known
+  // fields, then any multi-line or very long string wherever it sits, so a format change cannot leak source.
+  const stripCode = (node) => {
+    if (Array.isArray(node)) { node.forEach(stripCode); return; }
+    if (!node || typeof node !== 'object') return;
+    for (const [key, value] of Object.entries(node)) {
+      if (key === 'fragment' || key === 'blame') delete node[key];
+      else if (typeof value === 'string') { if (value.includes('\n') || value.length > 400) delete node[key]; }
+      else stripCode(value);
+    }
+  };
+  stripCode(data);
+  // Clones that touch the audit's own files are not findings.
+  const sideFile = (side) => (side && (side.name || side.path || side.file)) || '';
+  const all = Array.isArray(data.duplicates) ? data.duplicates : [];
+  const kept = all.filter((d) => ![d.firstFile, d.secondFile, d.first, d.second].some((side) => inAudit(sideFile(side))));
+  const dropped = all.length - kept.length;
+  if (Array.isArray(data.duplicates)) data.duplicates = kept;
   fs.writeFileSync(reportFile, JSON.stringify(data));
   const total = (data.statistics && data.statistics.total) || {};
+  const clones = Array.isArray(data.duplicates) ? kept.length : total.clones ?? null;
   record('jscpd', 'ran', {
     exit: r.code,
     file: path.relative(root, reportFile),
-    counts: { clones: total.clones ?? (data.duplicates || []).length, duplicatedPercent: total.percentage ?? null },
+    version: major,
+    scope,
+    // The percentage comes from jscpd's own total, so it is dropped when audit files had to be removed from it.
+    counts: { clones, duplicatedPercent: dropped ? null : total.percentage ?? null },
   });
 })();
 
@@ -598,7 +677,7 @@ save('summary.json', JSON.stringify(summary, null, 2));
 const lines = ['# Evidence Summary', '', `Generated: ${summary.generatedAt}`, `Network tools: ${allowNetwork ? 'enabled' : 'disabled'}`, '', '| Tool | Status | Key counts | Output |', '|---|---|---|---|'];
 for (const r of results) {
   const counts = r.counts ? Object.entries(r.counts).map(([k, v]) => `${k}: ${v}`).join(', ') : (r.reason || '');
-  lines.push(`| ${r.tool} | ${r.status}${r.exit != null ? ` (exit ${r.exit})` : ''} | ${counts} | ${r.file || ''} |`);
+  lines.push(`| ${r.tool} | ${r.status}${r.exit != null ? ` (exit ${r.exit})` : ''} | ${counts}${r.scope ? `; scanned using ${r.scope}` : ''} | ${r.file || ''} |`);
 }
 if (compareDir) {
   const before = tryJson((() => { try { return fs.readFileSync(path.resolve(root, compareDir, 'summary.json'), 'utf8'); } catch { return ''; } })());
@@ -626,9 +705,10 @@ if (missing.length) {
   lines.push('', 'Not installed (recommend to the user; never install during reconnaissance). Name each one in the report with what it left unproven:');
   for (const tool of missing) lines.push(`- ${tool}: cannot prove ${proves(tool) || 'its checks'}`);
 }
-const partial = results.filter((r) => r.status === 'partial').map((r) => r.tool);
+const partial = results.filter((r) => r.status === 'partial');
 if (partial.length) {
-  lines.push('', `Partial (findings are real, but a zero proves nothing for what was skipped): ${partial.join(', ')}`);
+  lines.push('', 'Partial (findings are real, but a zero proves nothing for what was skipped):');
+  for (const r of partial) lines.push(`- ${r.tool}: ${r.reason || 'see its output file'}`);
 }
 const notRun = results.filter((r) => r.status !== 'ran' && r.status !== 'partial').map((r) => `${r.tool} (${r.status})`);
 if (notRun.length) {
