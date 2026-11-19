@@ -133,6 +133,8 @@ For each:
 - **Observed Indicator:** why it was flagged.
 - **Next Step:** the specific command, trace or environment that would confirm or dismiss it.
 
+Both tiers count against the verdict: the checklist item is recorded as Probable or Unverified in Checklist Coverage, and the best verdict is Standard met, with gaps, until the item is settled.
+
 ## 4. Decisions Needed
 **New decisions.** Questions only the developer can answer: a business choice the right fix depends on, a blocked task, or a fact the code cannot show. For each: the checklist ID, what was found, the choice or fact needed, and the options with their trade-offs. Once answered, record the outcome here and in Checklist Coverage: a task, Accepted (and an entry in `.audit/accepted.md`), Confirmed by developer, or a Finding if the developer says something is missing.
 
