@@ -190,7 +190,7 @@ Every observation gets one label:
 | Label | Meaning |
 |---|---|
 | **Confirmed** | Proven by analyzer output, a complete trace from input to the dangerous operation, a failing test, or a local measurement. Only these become tasks. |
-| **Probable** | Strongly suggested but not proven. Always comes with the exact next step that would confirm or dismiss it. |
+| **Probable** | Strongly suggested but not proven. Always comes with the exact next step that would confirm or dismiss it. The audit takes that step when it can; one that stays Probable holds the verdict at "Standard met, with gaps". |
 | **Unverified** | A real concern the agent could not check because of tooling or environment limits. |
 | **Verified Safeguard** | An existing defense that works, so you know what not to break. |
 | **Not Applicable** | A checklist item your stack does not have. |
@@ -228,7 +228,7 @@ Every report opens with a verdict:
 |---|---|
 | **Audit in progress (Pass N of 4)** | The audit hasn't finished, so no other verdict applies yet. |
 | **Standard met** | Every applicable checklist item passed or doesn't apply, nothing went unchecked, no decisions are waiting on you, and nothing is left to fix. |
-| **Standard met, with gaps** | Nothing left to fix, but some items couldn't be checked or a decision is waiting on you. It lists exactly what stands between this and Standard met. |
+| **Standard met, with gaps** | Nothing left to fix, but some items couldn't be checked, are suspected but not proven, or a decision is waiting on you. It lists exactly what stands between this and Standard met. |
 | **Fixes remaining** | Fixes remain, counted by priority. It also tells you when no P0 or P1 tasks remain, which is the first milestone. |
 
 The verdict carries its evidence, for example: *"Standard met: 38 of 48 gated items passed, 7 not applicable, 2 confirmed by developer (SEC-15, ARCH-06), 1 accepted (SEC-16), at commit abc123 on 2026-11-06."* A Checklist Coverage table at the end of the report shows the outcome of every item, so you can check the claim.

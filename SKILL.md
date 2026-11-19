@@ -145,17 +145,20 @@ Every report opens with a verdict, so reaching the standard is stated plainly in
 | Accepted (an answered decision, or a finding the developer chose not to fix, with their reason) | Yes, listed by name in the verdict |
 | Finding (an open or blocked task) | No |
 | Unverified (could not be checked) | No |
+| Probable (suggested but not proven, with the step that would settle it) | No |
 | Decision Needed (waiting on the developer) | No |
 
 Verdict levels:
 - **Audit in progress (Pass N of 4):** until all four passes are written. Items in passes not yet run have no outcome, so no other verdict applies. Report the open task count by priority alongside it.
 - **Standard met:** the audit is complete, every gated item counts toward Standard met, and the queue has no open tasks. Advisory notes may remain.
-- **Standard met, with gaps:** the audit is complete and the queue is empty, but some items are Unverified or Decision Needed. List them; they are what stands between this and Standard met.
+- **Standard met, with gaps:** the audit is complete and the queue is empty, but some items are Probable, Unverified or Decision Needed. List them; they are what stands between this and Standard met.
 - **Fixes remaining:** the audit is complete and open tasks remain. Give counts by priority, and say when no P0 or P1 tasks remain, because that is the first milestone.
 
 Write it as one line with the evidence behind it, for example: "Standard met: 38 of 48 gated items passed, 7 not applicable, 2 confirmed by developer (SEC-15, ARCH-06), 1 accepted and reconfirmed today (SEC-16), at commit abc123 on 2026-11-06." Recompute the verdict at the end of every pass and every fix.
 
 **Closing the gaps that code cannot.** Some items can never be proven from the repository: whether alerts reach a person, whether backups exist, a hosting dashboard setting. List each such Unverified item in the final report under Decisions Needed, saying exactly what would confirm it, and ask about them in one grouped question during the decision step, after the report has been presented. Their answer makes it Confirmed by developer, or a Finding if they say it is missing. Never mark an item Confirmed by developer on your own inference. An Unverified item caused by a missing tool stays Unverified, and the summary names the tool that would check it.
+
+**Settling a Probable item.** A Probable item is not a task and is never fixed on suspicion, but it is never ignored either: a checklist item with a Probable observation against it cannot be Passed. Before the final report, take each Probable item's next step whenever it is read-only and possible here; most end as a Finding (confirmed, so it gets a task) or as Passed (dismissed, with what dismissed it). One that still cannot be settled stays Probable, is listed with its next step, and holds the verdict at Standard met, with gaps. In the decision step the developer may run the step themselves, or accept the item with a reason like any other.
 
 **Blocked tasks become decisions.** A task that cannot pass without weakening security or tests is a Decision Needed: the developer either accepts it with a reason, or keeps it open for a different approach.
 
