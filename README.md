@@ -357,10 +357,11 @@ references/
 scripts/
   collect-evidence.mjs          Read-only analyzer runner
   check-diff.mjs                Rejects fixes that weaken tests or add suppressions
-  self-test.mjs                 Checks both scripts against throwaway repositories
+  history.mjs                   Remembers findings and fixes across runs; spots comebacks and circles
+  self-test.mjs                 Checks the scripts against throwaway repositories
 ```
 
-To check the two scripts on your own machine, with your own git and Node versions, run `node scripts/self-test.mjs` from the skill's folder. It builds throwaway repositories set up the way the skill really sets a project up, runs the scripts against them, and removes them. It needs only Node and git.
+To check the scripts on your own machine, with your own git and Node versions, run `node scripts/self-test.mjs` from the skill's folder. It builds throwaway repositories set up the way the skill really sets a project up, runs the scripts against them, and removes them. It needs only Node and git.
 
 ## Using it outside Claude Code
 
