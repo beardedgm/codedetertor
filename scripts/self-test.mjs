@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // codedetective self-test.
-// Checks the two bundled scripts against throwaway repositories set up the way the skill really sets a
+// Checks the bundled scripts against throwaway repositories set up the way the skill really sets a
 // project up (for example with .audit/ git-ignored), so a change that only works in a bare test folder is
 // caught here. Uses only Node and git. Stand-in tools are used where the real one is not needed; the real
 // TypeScript compiler is used when it is on PATH.
@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const CHECK_DIFF = path.join(here, 'check-diff.mjs');
 const EVIDENCE = path.join(here, 'collect-evidence.mjs');
+const HISTORY = path.join(here, 'history.mjs');
 const isWin = process.platform === 'win32';
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'codedetective-selftest-'));
 const MARK = 'selftest-marker-do-not-leak';
@@ -247,6 +248,124 @@ check('type check (real compiler): a config below the root is found and checked'
   const row = r.out.split('\n').find((l) => l.startsWith('| tsc |')) || '';
   assert(/\| ran/.test(row) && /errors: 1\b/.test(row) && /filesChecked: 1\b/.test(row), `tsc row was: ${row || '(none)'}`);
   assert(!fs.readdirSync(path.join(repo, 'shared')).some((f) => f.endsWith('.tsbuildinfo')), 'a build file was written into the project');
+});
+
+// ---- history: matching across runs, comebacks and circles ----
+function hist(repo, args) {
+  const r = node(repo, HISTORY, args);
+  let json = null;
+  try { json = JSON.parse(r.out); } catch { /* not JSON: an error message */ }
+  return { ...r, json };
+}
+function run(repo, id, findings) {
+  const file = path.join(tmp, `${path.basename(repo)}-${id}.json`);
+  fs.writeFileSync(file, JSON.stringify(findings));
+  const r = hist(repo, ['record-run', '--run', id, '--findings', file]);
+  assert(r.code === 0 && r.json, `record-run failed: ${r.out}`);
+  return r.json;
+}
+const labelOf = (out, id) => (out.findings.find((f) => f.id === id) || {}).label;
+function historyRepo(name) {
+  const repo = newRepo(name);
+  git(repo, 'config', 'core.excludesFile', '');
+  fs.appendFileSync(path.join(repo, '.git', 'info', 'exclude'), '.audit/\n');
+  commit(repo);
+  return repo;
+}
+const change = (repo, rel, text, message) => { write(repo, rel, text); git(repo, 'add', '-A'); git(repo, 'commit', '-q', '-m', message); };
+const DUP = { id: 'QUAL-02', file: 'src/a.js', symbol: 'load' };
+
+check('history: a finding fixed and found again is "came back", with the commits since the fix', () => {
+  const repo = historyRepo('h-back');
+  assert(labelOf(run(repo, 'r1', [DUP]), 'QUAL-02') === 'first-run', 'first run was not labelled first-run');
+  hist(repo, ['record-fix', '--task', 'TASK-001', '--id', 'QUAL-02', '--at', 'src/a.js#load']);
+  change(repo, 'src/a.js', 'export const a = 2;\n', 'later edit');
+  const out = run(repo, 'r2', [DUP]);
+  const row = out.findings[0];
+  assert(row.label === 'came-back' && row.fixedBy.task === 'TASK-001', `label was ${row.label}`);
+  assert(row.changedSince.some((l) => l.includes('later edit')), 'the commit that touched the file after the fix was not listed');
+});
+
+check('history: a second comeback is a circle', () => {
+  const repo = historyRepo('h-twice');
+  run(repo, 'r1', [DUP]);
+  hist(repo, ['record-fix', '--task', 'TASK-001', '--id', 'QUAL-02', '--at', 'src/a.js#load']);
+  run(repo, 'r2', [DUP]);
+  hist(repo, ['record-fix', '--task', 'TASK-002', '--id', 'QUAL-02', '--at', 'src/a.js#load']);
+  const out = run(repo, 'r3', [DUP]);
+  assert(labelOf(out, 'QUAL-02') === 'circle' && out.counts.circle === 1, `label was ${labelOf(out, 'QUAL-02')}`);
+});
+
+check('history: a fix that renames and moves a function still matches (not "new")', () => {
+  const repo = historyRepo('h-rename');
+  run(repo, 'r1', [DUP]);
+  hist(repo, ['record-fix', '--task', 'TASK-001', '--id', 'QUAL-02', '--at', 'src/a.js#load', '--renamed', 'src/a.js#load=src/lib/data.js#loadAll']);
+  const out = run(repo, 'r2', [{ id: 'QUAL-02', file: 'src/lib/data.js', symbol: 'loadAll' }]);
+  assert(labelOf(out, 'QUAL-02') === 'came-back', `label was ${labelOf(out, 'QUAL-02')}`);
+});
+
+check('history: a file moved by hand is followed through git, so an open finding stays "still open"', () => {
+  const repo = historyRepo('h-move');
+  run(repo, 'r1', [DUP]);
+  fs.mkdirSync(path.join(repo, 'lib'));
+  git(repo, 'mv', 'src/a.js', 'lib/a.js');
+  git(repo, 'commit', '-q', '-m', 'move');
+  const out = run(repo, 'r2', [{ id: 'QUAL-02', file: 'lib/a.js', symbol: 'load' }]);
+  assert(labelOf(out, 'QUAL-02') === 'still-open' && out.counts.new === 0, `label was ${labelOf(out, 'QUAL-02')}`);
+});
+
+check('history: a new finding in code a fix created is "follows a fix"; an unrelated one is "new"', () => {
+  const repo = historyRepo('h-follows');
+  run(repo, 'r1', [DUP]);
+  hist(repo, ['record-fix', '--task', 'TASK-001', '--id', 'QUAL-02', '--at', 'src/a.js#load', '--created', 'src/shared.js#loadShared']);
+  const out = run(repo, 'r2', [{ id: 'QUAL-13', file: 'src/shared.js', symbol: 'loadShared' }, { id: 'QUAL-07', file: 'src/other.js', symbol: 'save' }]);
+  assert(labelOf(out, 'QUAL-13') === 'follows-fix' && out.findings[0].fix.task === 'TASK-001', `QUAL-13 was ${labelOf(out, 'QUAL-13')}`);
+  assert(labelOf(out, 'QUAL-07') === 'new', `QUAL-07 was ${labelOf(out, 'QUAL-07')}`);
+  assert(out.counts.fixed === 1, 'the fixed finding was not reported as fixed');
+});
+
+check('history: fixing A causes B, and fixing B brings A back: a circle on the first comeback', () => {
+  const repo = historyRepo('h-chain');
+  run(repo, 'r1', [DUP]);
+  hist(repo, ['record-fix', '--task', 'TASK-001', '--id', 'QUAL-02', '--at', 'src/a.js#load', '--created', 'src/shared.js#loadShared']);
+  run(repo, 'r2', [{ id: 'QUAL-13', file: 'src/shared.js', symbol: 'loadShared' }]);
+  hist(repo, ['record-fix', '--task', 'TASK-002', '--id', 'QUAL-13', '--at', 'src/shared.js#loadShared', '--changed', 'src/a.js#load']);
+  const out = run(repo, 'r3', [DUP]);
+  const row = out.findings.find((f) => f.id === 'QUAL-02');
+  assert(row.label === 'circle' && row.chain && row.chain.length === 2, `label was ${row.label}`);
+});
+
+check('history: a settled circle is not raised again, and lookup shows what happened at a place', () => {
+  const repo = historyRepo('h-settled');
+  run(repo, 'r1', [DUP]);
+  hist(repo, ['record-fix', '--task', 'TASK-001', '--id', 'QUAL-02', '--at', 'src/a.js#load']);
+  run(repo, 'r2', [DUP]);
+  hist(repo, ['set-status', '--id', 'QUAL-02', '--at', 'src/a.js#load', '--status', 'settled', '--note', 'keep the two copies']);
+  const out = run(repo, 'r3', [DUP]);
+  assert(labelOf(out, 'QUAL-02') === 'settled' && out.counts.circle === 0, `label was ${labelOf(out, 'QUAL-02')}`);
+  const look = hist(repo, ['lookup', '--at', 'src/a.js#load']).json;
+  assert(look.fixes.length === 1 && look.findings[0].status === 'settled', 'lookup did not return the fix and the settled finding');
+});
+
+check('history: when the file is lost, fixes are recovered from labelled commits', () => {
+  const repo = historyRepo('h-recover');
+  run(repo, 'r1', [DUP]);
+  const label = hist(repo, ['label', '--task', 'TASK-001', '--id', 'QUAL-02', '--at', 'src/a.js#load']).out.trim();
+  write(repo, 'src/a.js', 'export const a = 3;\n');
+  git(repo, 'add', '-A');
+  git(repo, 'commit', '-q', '-m', `Remove the copy\n\n${label}`);
+  fs.rmSync(path.join(repo, '.audit'), { recursive: true, force: true });
+  const out = run(repo, 'r2', [DUP]);
+  assert(labelOf(out, 'QUAL-02') === 'came-back', `label was ${labelOf(out, 'QUAL-02')}`);
+});
+
+check('history: the same run cannot be recorded twice, and nothing outside .audit is written', () => {
+  const repo = historyRepo('h-once');
+  run(repo, 'r1', [DUP]);
+  const file = path.join(tmp, 'again.json');
+  fs.writeFileSync(file, '[]');
+  assert(hist(repo, ['record-run', '--run', 'r1', '--findings', file]).code === 2, 'a repeated run was accepted');
+  assert(git(repo, 'status', '--porcelain').out.trim() === '', 'the working tree shows changes outside .audit');
 });
 
 fs.rmSync(tmp, { recursive: true, force: true });
