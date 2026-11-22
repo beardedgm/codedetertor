@@ -7,6 +7,7 @@
 - Plan files (`plans/` in the run folder)
 - Report structure (`code-health-report.md` in the run folder)
 - Since last audit
+- External review (findings handed in from outside the audit)
 - Final report presentation (what is shown in the conversation when the audit ends)
 - Task schema
 - Progress tracking
@@ -109,6 +110,7 @@ Write `code-health-report.md` in the current run's folder (`.audit/runs/<run-id>
 - Pass 4: <...>
 - Full report presented: <date, or "not yet">
 - Decisions: <n waiting on the developer | all answered on date>
+- External reviews: <none | date, name, n claims: n confirmed (n missed by the audit), n already in the report, n refuted, n not settled>
 - Remediation: <n of m tasks done; open tasks by priority (P0 n, P1 n, P2 n); next eligible task ID; the next step and its command>
 - Active batch plan: <plans/batch-<name>.md, tasks remaining | none>
 
@@ -192,6 +194,16 @@ Shows that the audit examined the whole repository, so "we looked at everything"
 | client/src/legacy | 40 | 0 | none | Session ended before it was reached; COV-client-legacy is Unverified |
 
 Every file in the inventory is read at least once, and every pass considers every area. Anything left unexamined when the run ends is listed here with the reason and gets a `COV-<area>` row in section 9 marked Unverified.
+## 11. External Review
+Only when the developer has handed in findings from outside (`/codedetective review`). One block per review: its name, date, where the saved copy is, and counts by result.
+
+| EXT | Claim, in one line | Checklist ID | Result | Missed by the audit | Task or reason |
+|---|---|---|---|---|---|
+| EXT-01 | Password reset tokens never expire | SEC-05 | Confirmed | Yes: Pass 1, SEC-05 | P1-07 |
+| EXT-02 | No rate limit on login | SEC-16 | Already in the report | No | P1-02 |
+| EXT-03 | SQL injection in search | SEC-08 | Refuted | No | The query is parameterized: server/routes/search.js, line 41 |
+
+A claim is checked against the code before it gets a result; the outside reviewer's word is never the evidence.
 ```
 
 ---
@@ -238,6 +250,7 @@ PROGRESS: <Queued | Planned | In progress | Done | Blocked: reason>
 PLAN: <plans/<file>.md in the run folder once a plan is approved, or "none">
 DELIVERY: <"not committed" | commit <short hash> | PR #<n> open | PR #<n> merged; filled in only when the user asks for a commit, pull request or merge>
 CHECK_ID: <Checklist ID, e.g. SEC-03, or PROJ-NN for a project-specific finding>
+SOURCE: <"audit" | external review (<name>, <date>, EXT-NN); either way the evidence below is what the audit gathered itself>
 SUBSYSTEM: <Comma-separated list of affected areas>
 STANDARD: <Security: OWASP Top 10:2025 category and ASVS 5.0 chapter. Others: the source tag on the checklist item (a CWE ID or named practice from sources.md). PROJ-NN: the closest source, or "none">
 TARGET_SYMBOLS:

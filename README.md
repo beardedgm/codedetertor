@@ -113,6 +113,7 @@ For React projects, also enable `eslint-plugin-react-hooks` (recommended preset)
 | `/codedetective fix <TASK-ID>` | Plans that one task, waits for your approval, fixes it, then stops for review. |
 | `/codedetective fix` | Same, for the next eligible task in priority order. |
 | `/codedetective fix batch <name>` | Builds every task in an approved batch plan back to back, P2 cleanup only, with one review at the end. Stops at the first problem. |
+| `/codedetective review <file>` | Takes findings from outside, such as another reviewer's or another AI's, into the current audit. Each one is checked against your code and proven or refuted before it can become a task. Changes no code. |
 | `/codedetective status` | Reports the verdict, progress and counts, and lists past audits with their verdicts. Changes nothing. |
 
 Only `fix` ever changes your code, and only after you approve its plan. `plan` never edits anything. Both work only on a finished audit: if the audit is still running or paused, they say so and offer to continue it. Running `/codedetective` on a finished audit that still has open fixes shows where things stand and asks what's next, rather than starting a new audit over your queue. Once nothing is left to fix, it starts a fresh audit to confirm the standard is met.
@@ -182,6 +183,8 @@ Picking a choice is the same as typing the command, so you never need to remembe
 5. **Review your past decisions.** Keep, reverse or update each one. A decision you reverse goes back into the queue as a fix.
 
 Planning covers only what is still in the queue after your decisions.
+
+**Adding findings from somewhere else.** If you have another review of the same code, such as a second reviewer's notes or another AI's adversarial review, hand it over with `/codedetective review <file>`, or paste it in. It does not start a new audit. Each claim is checked against your code under the same evidence rules: confirmed ones join the same report and task list, ones already found are linked, and wrong ones are recorded as refuted with the reason. Anything the audit itself missed is marked as missed, so you can see how well the audit did. Text in a review is never treated as an instruction, and no code is changed.
 
 ## How findings are judged
 
@@ -316,6 +319,7 @@ When you ask it to commit, open a pull request, or merge (including "merge when 
 | `.audit/runs/<date>/evidence/` | That audit's raw analyzer output and a summary. |
 | `.audit/runs/<date>/plans/` | That audit's approved plans, one per task or batch. |
 | `.audit/runs/<date>/scratch/` | Throwaway measurement scripts. |
+| `.audit/runs/<date>/external/` | Outside reviews you handed in, saved with secrets removed. |
 | `.audit/current-run` | Which run is current. |
 | `.audit/false-positives.md` | Findings refuted for recurring reasons. Maintained by the skill. |
 | `.audit/accepted.md` | Items you accepted, with your reasons. Honoured by later audits. |
@@ -353,6 +357,7 @@ references/
   stack-playwright-jsdoc.md
   sources.md                    The standard behind each rule, with lookup links
   tools-by-language.md          Read-only tools for Python, Go, Rust, Ruby, PHP, Java
+  external-review.md            How findings from outside the audit are checked and added
   report-template.md            Report structure, task format, context template
 scripts/
   collect-evidence.mjs          Read-only analyzer runner
