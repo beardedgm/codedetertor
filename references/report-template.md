@@ -88,6 +88,20 @@ Approved plans are saved in the current run's `plans/` folder after plan mode, b
 - Differs from report task: <anything the current code forced to change, or "nothing">
 ```
 
+The P2 group plan has an overview file, `plans/p2-groups.md`, and one batch file per group in the format above:
+
+```markdown
+# Plan: p2-groups
+- Approved: <date>
+- Against commit: <short hash>
+- Re-check: <n still valid, n changed, n resolved by earlier work, n no longer apply>
+
+| Order | Group | Checklist item | Area | Tasks | Files | Builds after |
+|---|---|---|---|---|---|---|
+| 1 | p2-dead-code-server | QUAL-03 | server | P2-04, P2-05, P2-09 | 6 | none |
+| 2 | p2-duplication-client | QUAL-02 | client/src/features | P2-01, P2-07 | 4 | p2-dead-code-server |
+```
+
 ---
 
 ## Report structure
@@ -102,6 +116,7 @@ Write `code-health-report.md` in the current run's folder (`.audit/runs/<run-id>
 ## 0. Progress
 - Run: <run-id>, started <date and time> against commit <short hash>
 - Status: <unfinished | complete | abandoned>
+- Stage: <1 audit | 2 report | 3 decisions | 4 plan P0 and P1 | 5 fix P0 and P1 | 6 P2 re-check | 7 plan P2 | 8 fix P2 | 9 finished> (stages are defined in `references/flow.md`; update at every stop)
 - Previous run: <run-id, or "none">
 - Phase 0: <done | in progress | not started>
 - Pass 1: <...>
@@ -226,7 +241,7 @@ When the audit is complete, show this in the conversation, in this order. It is 
 6. **Not checked:** any files or areas that were not examined and why; each tool that was missing or skipped, with the checklist items it left unproven and how to get it (from the evidence summary); checks that did not happen; and technologies checked only against the general checklists.
 7. **Where the full report is:** the path to `code-health-report.md`, and one line saying that nothing has been changed and nothing will be planned or fixed until they ask.
 
-Record the date in the Progress section ("Full report presented"). If the conversation ends before the developer has seen it, present it again when they next run `/codedetective`.
+Record the date in the Progress section ("Full report presented"). If the conversation ends before the developer has seen it, present it again when they next run `/codedetective` or `/codedetective resume`.
 
 ---
 
@@ -246,7 +261,7 @@ The block below is a format template only. Do not report it, and do not assume a
 TITLE: <Concise, action-oriented title describing the remediation>
 STATUS: <Confirmed | Preventive>
 PRIORITY: <P0 | P1 | P2>
-PROGRESS: <Queued | Planned | In progress | Done | Blocked: reason>
+PROGRESS: <Queued | Planned | In progress | Done | Resolved: reason | Blocked: reason>
 PLAN: <plans/<file>.md in the run folder once a plan is approved, or "none">
 DELIVERY: <"not committed" | commit <short hash> | PR #<n> open | PR #<n> merged; filled in only when the user asks for a commit, pull request or merge>
 CHECK_ID: <Checklist ID, e.g. SEC-03, or PROJ-NN for a project-specific finding>
@@ -282,4 +297,4 @@ VERIFICATION RESULTS:
 
 ## Progress tracking
 
-When a plan is approved, set each covered task's `PROGRESS` to Planned and fill in `PLAN`. When a task is proven done (see "Proof of done" in SKILL.md), set its `PROGRESS` to Done, fill in `VERIFICATION RESULTS`, and update section 0. A task whose checks failed or could not be run is never Done. When the user asks for a commit, pull request or merge, record it in `DELIVERY` for each task it covers. When a task is blocked (for example it cannot pass without weakening security or tests, or it needs a dependency the user has not approved), set `PROGRESS` to `Blocked: <reason>`, add it to Decisions Needed, and stop. The next eligible task is the first in queue order that is Queued or Planned and whose prerequisites are all Done; while a batch plan is active, take its next task in the batch's order. When the full report has been shown, record the date under "Full report presented", and keep the "Decisions" line current as the developer answers.
+When a plan is approved, set each covered task's `PROGRESS` to Planned and fill in `PLAN`. When a task is proven done (see "Proof of done" in SKILL.md), set its `PROGRESS` to Done, fill in `VERIFICATION RESULTS`, and update section 0. A task whose checks failed or could not be run is never Done. `Resolved: <reason>` is set only by the P2 re-check (see `references/flow.md`), for a task that is no longer present after earlier fixes, with the evidence; it is closed, like Done. When the user asks for a commit, pull request or merge, record it in `DELIVERY` for each task it covers. When a task is blocked (for example it cannot pass without weakening security or tests, or it needs a dependency the user has not approved), set `PROGRESS` to `Blocked: <reason>`, add it to Decisions Needed, and stop. The next eligible task is the first in queue order that is Queued or Planned and whose prerequisites are all Done; while a batch plan is active, take its next task in the batch's order. When the full report has been shown, record the date under "Full report presented", and keep the "Decisions" and "Stage" lines current at every stop.
