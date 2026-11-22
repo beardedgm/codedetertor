@@ -29,36 +29,46 @@ The goal is what an experienced lead developer would call good clean code: secur
 
 ## Install
 
-**For every project** (recommended):
+The skill is a plain folder with a `SKILL.md` in it, so it installs into any coding agent that reads skills. The open [skills](https://github.com/vercel-labs/skills) installer does it in one command and needs Node.js 22.20 or later.
+
+**Pick your agent.** Run this, and it asks which coding agents to install for:
 
 ```bash
-npx skills add beardedgm/codedetertor -g -a claude-code
+npx skills add beardedgm/codedetertor -g
 ```
 
-**For one project only**, run this from that project's folder:
+Or name the agent yourself with `-a`:
 
-```bash
-npx skills add beardedgm/codedetertor -a claude-code
-```
+| Agent | Command | Installs into |
+|---|---|---|
+| Claude Code | `npx skills add beardedgm/codedetertor -g -a claude-code` | `~/.claude/skills/codedetective/` |
+| OpenAI Codex | `npx skills add beardedgm/codedetertor -g -a codex` | `~/.agents/skills/codedetective/` |
+| Google Antigravity | `npx skills add beardedgm/codedetertor -g -a antigravity` | `~/.gemini/config/skills/codedetective/` |
+| Gemini CLI | `npx skills add beardedgm/codedetertor -g -a gemini-cli` | `~/.gemini/skills/codedetective/` |
+| Cursor | `npx skills add beardedgm/codedetertor -g -a cursor` | `~/.cursor/skills/codedetective/` |
+| GitHub Copilot | `npx skills add beardedgm/codedetertor -g -a github-copilot` | `~/.copilot/skills/codedetective/` |
 
-This uses the open [skills](https://github.com/vercel-labs/skills) installer and needs Node.js 22.20 or later. It installs into `~/.claude/skills/codedetective/` (every project) or `.claude/skills/codedetective/` (one project). Leave off `-a claude-code` and it will ask which coding agents to install for.
+`-g` installs it for every project. Leave `-g` off, and run the command from a project's folder, to install it for that project only. Several agents at once: repeat `-a`, as in `-a claude-code -a codex`. The installer supports many more agents than these; `npx skills add beardedgm/codedetertor -g` lists the ones it finds on your machine.
 
-Start a new Claude Code session and `/codedetective` appears.
+Then start a new session in that agent. In Claude Code, `/codedetective` appears. In other agents, see [Using it outside Claude Code](#using-it-outside-claude-code) for how to call it.
 
-To update later:
+To update later, in any agent:
 
 ```bash
 npx skills update codedetective
 ```
 
-**Without Node.js**, clone the repository instead. The installed folder must be named `codedetective`:
+**Without Node.js**, clone the repository into your agent's skills folder instead (the folders are in the table above). The installed folder must be named `codedetective`:
 
 ```bash
-# macOS or Linux
+# Claude Code, macOS or Linux
 git clone https://github.com/beardedgm/codedetertor.git ~/.claude/skills/codedetective
 
-# Windows (PowerShell)
+# Claude Code, Windows (PowerShell)
 git clone https://github.com/beardedgm/codedetertor.git "$env:USERPROFILE\.claude\skills\codedetective"
+
+# OpenAI Codex, macOS or Linux
+git clone https://github.com/beardedgm/codedetertor.git ~/.agents/skills/codedetective
 ```
 
 To update a cloned install, run `git pull` inside that folder.
@@ -370,4 +380,24 @@ To check the scripts on your own machine, with your own git and Node versions, r
 
 ## Using it outside Claude Code
 
-The `argument-hint` and `disable-model-invocation` lines in the `SKILL.md` frontmatter are Claude Code features. The second one means the skill runs only when you type `/codedetective`, never on its own. If you load the skill somewhere that rejects those fields, delete those two lines.
+The skill was built and tested in Claude Code. It installs and runs in other agents that read skills, such as OpenAI Codex and Google Antigravity, but it has not been tested in them, and a few things work differently there.
+
+**Calling it.** Other agents may not turn the skill into a `/codedetective` command. Ask for it by name and say the mode in words:
+
+| In Claude Code | In another agent |
+|---|---|
+| `/codedetective new` | "Use the codedetective skill to run a new audit." |
+| `/codedetective status` | "Use the codedetective skill: status." |
+| `/codedetective plan P0` | "Use the codedetective skill to plan the P0 tasks." |
+| `/codedetective fix P0-01` | "Use the codedetective skill to fix P0-01." |
+| `/codedetective review notes.md` | "Use the codedetective skill to review the findings in notes.md." |
+
+**What differs.**
+
+- **It may start on its own.** In Claude Code the skill runs only when you call it. That is a Claude Code setting (`disable-model-invocation`), and other agents ignore it, so one of them may pick the skill up when you ask a related question. If it does, tell it to stop.
+- **Plan approval happens in the chat.** Without Claude Code's plan mode, the agent shows the plan in the conversation and waits for your go-ahead. It still never edits code before you approve.
+- **The second opinion is weaker.** In Claude Code a separate fresh agent tries to refute each serious finding. Where an agent cannot start one, the same agent does that check itself as a separate step.
+- **The script folder.** The skill refers to its own folder as `${CLAUDE_SKILL_DIR}`. Other agents do not fill that in, and the skill tells the agent to use the folder that holds `SKILL.md` instead.
+- **Frontmatter.** `argument-hint` and `disable-model-invocation` in `SKILL.md` are Claude Code fields. If an agent rejects them, delete those two lines.
+
+Everything else is the same: the checklists, the evidence rules, the report, and the files under `.audit/`. A run started in one agent can be continued in another, because the run's memory is those files.
