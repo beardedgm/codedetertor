@@ -185,17 +185,20 @@ Tasks in the schema below.
 ## 9. Checklist Coverage
 One line per gated item (every checklist item except `QUAL-11` to `QUAL-16`, plus loaded stack items, `GAP` rows and `COV` rows), plus any `PROJ-NN` findings, so the verdict can be checked. The rows below are format examples only:
 
-| ID | Outcome | Where or why |
+| ID | Outcome | What was examined and what it showed, or why |
 |---|---|---|
-| SEC-01 | Passed | Verified Safeguard: session cookies HttpOnly, Secure, SameSite=Lax in server/auth.js |
+| SEC-01 | Passed | Verified Safeguard. Read server/auth.js and all 3 `res.cookie` calls in the server: the session cookie is set HttpOnly, Secure, SameSite=Lax in each |
 | SEC-20 | Not Applicable | No LLM features |
 | SEC-03 | Finding | P0-01 |
 | SEC-15 | Confirmed by developer | Developer, 2026-11-06: "Sentry alerts page me on auth error spikes" |
 | SEC-16 | Accepted, reconfirmed 2026-11-06 | No signup rate limit: invite-only beta; premise checked, signup still requires an invite code |
-| MONGO-02 | Passed | Filters built from picked fields in server/routes/*.js |
+| MONGO-02 | Passed | Read all 14 files in server/routes: every query filter is built from picked fields, and none passes `req.body` or `req.query` through |
+| QUAL-04 | Passed | Circular import check ran (status `ran`): 0 cycles, in the evidence folder |
 | GAP-Supabase | Unverified | No stack reference; checked against the general checklists only |
 
-Rows cover every gated checklist item, every non-advisory item of each loaded stack reference, one `GAP-<technology>` row per detected technology with no stack reference, and one `COV-<area>` row per area or file left unexamined (section 10). Outcomes: Passed (a Verified Safeguard or nothing found), Not Applicable, Confirmed by developer (with what they said and the date), Accepted (with the reason), Finding (with task or section reference), Unverified (with the blocker), Decision Needed. The verdict counts come from this table.
+Rows cover every gated checklist item, every non-advisory item of each loaded stack reference, one `GAP-<technology>` row per detected technology with no stack reference, and one `COV-<area>` row per area or file left unexamined (section 10). Outcomes: Passed (a Verified Safeguard, or nothing found by a check the row describes), Not Applicable, Confirmed by developer (with what they said and the date), Accepted (with the reason), Finding (with task or section reference), Unverified (with the blocker), Decision Needed. The verdict counts come from this table.
+
+A Passed row is a claim someone may try to break, so it carries its proof of pass: what was examined (the files or areas read, or the tool and its result) and the fact that makes the item pass. A row that says only "checked" or "nothing found" is not a pass; record it as Unverified with the reason.
 
 ## 10. Codebase Coverage
 Shows that the audit examined the whole repository, so "we looked at everything" can be checked. Update it as each pass finishes. The rows below are format examples only:

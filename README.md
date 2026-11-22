@@ -269,6 +269,7 @@ The same goes for the skill's own past conclusions: a finding it once ruled a fa
 
 - **Everything that fails the standard gets fixed.** Low-impact findings are fixed at low priority, not skipped.
 - **Opinions never block the verdict.** Pass 4's judgment calls (design fit, naming, simplicity) are advisory only, so "could be written differently" never keeps you from the finish line.
+- **A pass has to show its work.** Every passed item says what was examined and what it showed ("all 14 route files read; every handler checks the owner before the query"), so you, or a reviewer trying to break it, can check the claim. An item the audit cannot say that for is reported as not checked, never as passed.
 - **Only an audit can confirm it.** When you fix the last task, the verdict says all findings are fixed and offers `/codedetective new` to confirm, because the fixes changed code the audit never saw.
 - **The verdict has a date.** It applies to the audited commit. New code, a newly published vulnerability in a package you use, or a new edition of a standard can change it, which is what the next audit is for.
 - **It is not a proof of zero bugs.** No tool or reviewer can prove that. It shows every item in the standard was checked and passed.
