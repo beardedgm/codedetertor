@@ -19,6 +19,7 @@ The goal is what an experienced lead developer would call good clean code: secur
 - [When the audit finishes](#when-the-audit-finishes)
 - [How findings are judged](#how-findings-are-judged)
 - [The verdict: reaching the standard](#the-verdict-reaching-the-standard)
+- [The flow, stage by stage](#the-flow-stage-by-stage)
 - [How planning works](#how-planning-works)
 - [How fixes work](#how-fixes-work)
 - [Safety guarantees](#safety-guarantees)
@@ -108,21 +109,26 @@ For React projects, also enable `eslint-plugin-react-hooks` (recommended preset)
 4. It then profiles the project, gathers tool evidence, and runs all four passes without stopping. It pauses only if it has a question it cannot continue without.
 5. Read the full report it shows at the end: every P0, P1 and P2, with what is wrong, where, and the evidence. The same report, with full detail, is saved in `.audit/runs/<date>/code-health-report.md`.
 6. Make your decisions: correct anything it got wrong, answer its open questions, and say which findings you accept as they are.
-7. Run `/codedetective plan` to plan the fixes. Nothing is planned or fixed before this point.
+7. Run `/codedetective plan` to plan the P0 and P1 fixes together. Nothing is planned or fixed before this point.
 8. Approve the plan, then run `/codedetective fix` to build one fix at a time, reviewing each.
+9. When the P0 and P1 fixes are done, run `/codedetective plan P2`. It re-checks the P2 tasks against the changed code and plans them in small groups.
+
+You can stop at any point. `/codedetective resume` picks up where you left off.
 
 ## Commands
 
 | Command | What it does |
 |---|---|
-| `/codedetective` | Resumes an unfinished audit. On a finished audit with open fixes, shows status and asks what's next. Starts a new audit only when nothing is left to fix. Never starts fixing. |
+| `/codedetective resume` | Picks up where the audit or the fixing stopped, and asks what's next. With nothing to pick up, it says so and points you to `new`. Never starts fixing, and never starts a new audit. |
+| `/codedetective` | The same as `resume`, except that it starts a new audit when there is none yet or nothing is left to fix. |
 | `/codedetective new` | Always starts a fresh audit of the whole codebase, from beginning to end. It never resumes, and it never looks only at what changed. |
 | `/codedetective pass <1-4>` | Runs or reruns one pass. |
-| `/codedetective plan` | Plans all P0 tasks together in plan mode, for one approval. Changes no code. |
-| `/codedetective plan <P1\|P2\|TASK-IDs>` | Plans another tier, or a list of tasks such as `P0-01 P1-03`. |
+| `/codedetective plan` | Plans all P0 and P1 tasks together in plan mode, for one approval. Changes no code. |
+| `/codedetective plan P2` | Re-checks the P2 tasks against the code as it stands now, then plans them in small groups, for one approval. |
+| `/codedetective plan <P0\|P1\|TASK-IDs>` | Plans one tier, or a list of tasks such as `P0-01 P1-03`. |
 | `/codedetective fix <TASK-ID>` | Plans that one task, waits for your approval, fixes it, then stops for review. |
 | `/codedetective fix` | Same, for the next eligible task in priority order. |
-| `/codedetective fix batch <name>` | Builds every task in an approved batch plan back to back, P2 cleanup only, with one review at the end. Stops at the first problem. |
+| `/codedetective fix batch <name>` | Builds every task in an approved P2 group back to back, with one review at the end. Stops at the first problem. |
 | `/codedetective review <file>` | Takes findings from outside, such as another reviewer's or another AI's, into the current audit. Each one is checked against your code and proven or refuted before it can become a task. Changes no code. |
 | `/codedetective status` | Reports the verdict, progress and counts, and lists past audits with their verdicts. Changes nothing. |
 
@@ -178,9 +184,9 @@ The same report, with the full traces and tool output, is saved in `.audit/runs/
 
 Then it stops. Nothing has been changed, and nothing is planned or fixed until you ask. If the verdict is Standard met, it says so and there is nothing to do. Otherwise it asks what you want next:
 
-1. **Stop so you can read it.** This is the default.
+1. **Plan the P0 and P1 fixes.** These come before everything else, and planning changes no code.
 2. **Go through the decisions.** It walks you through its open questions and the choices that are yours to make.
-3. **Plan the fixes.** It moves on to planning.
+3. **Stop so you can read it.** Everything is saved, and `/codedetective resume` picks up here. Saying nothing also means stop.
 
 Picking a choice is the same as typing the command, so you never need to remember the syntax.
 
@@ -267,6 +273,26 @@ The same goes for the skill's own past conclusions: a finding it once ruled a fa
 - **The verdict has a date.** It applies to the audited commit. New code, a newly published vulnerability in a package you use, or a new edition of a standard can change it, which is what the next audit is for.
 - **It is not a proof of zero bugs.** No tool or reviewer can prove that. It shows every item in the standard was checked and passed.
 
+## The flow, stage by stage
+
+The order is fixed, so what happens next never depends on how the agent decides to hand off:
+
+| Stage | What happens | Where it stops |
+|---|---|---|
+| 1. Audit | All four passes, straight through | Only for a question it cannot continue without |
+| 2. Report | The full report | Asks: plan the P0 and P1 fixes, go through the decisions, or stop |
+| 3. Decisions | You correct, answer and accept | When you are done |
+| 4. Plan P0 and P1 | One plan for every P0 and P1 fix | For your approval |
+| 5. Fix P0 and P1 | One fix at a time | After each fix, for your review |
+| 6. P2 re-check | Every P2 task is checked again against the changed code and sorted into groups | Goes straight on |
+| 7. Plan P2 | One plan listing every group | For your approval |
+| 8. Fix P2 | One group at a time | After each group, for your review |
+| 9. Finished | Says every finding is fixed | Offers a new audit to confirm |
+
+P0 and P1 always come first. P2 waits until they are done, because those fixes change the code the P2 work would be planned against. Some P2 tasks turn out to be already resolved by then; the re-check closes them with the evidence.
+
+A P2 group is one kind of change in one area of the code, at most about ten tasks, with tasks that touch the same files kept together. Each group is small enough to be one pull request.
+
 ## How planning works
 
 Planning starts only after the audit is finished and you have seen the full report. If decisions that affect a fix are still open, it asks you those first. No code changes until you approve a plan. Plans use Claude Code's plan mode, which is read-only: Claude asks to switch into it, reads the current code, writes the plan, and submits it for your approval. If you'd rather not switch modes, it shows the same plan in the conversation and waits for your go-ahead.
@@ -275,7 +301,7 @@ Every plan names the files and functions it will change, what changes in each, t
 
 **One task at a time.** `/codedetective fix` plans the task, waits for your approval, then builds it.
 
-**A batch.** `/codedetective plan` lays out a group of tasks in the order they must be built, with a short plan for each and a section on how they interact: fixes that touch the same files, an order that matters, or one fix changing what another must do. Approving a batch approves the approach, not the edits. Each task is still built in its own `fix` run, with its own review stop. The one exception is a batch made entirely of P2 cleanup tasks: `/codedetective fix batch <name>` builds them back to back, with every task still going through its own snapshot, tests and cheating check, and stops at the first problem, with one review at the end. P0 and P1 fixes always get their own review.
+**A batch.** `/codedetective plan` lays out the P0 and P1 tasks, and `/codedetective plan P2` each P2 group, in the order they must be built, with a short plan for each and a section on how they interact: fixes that touch the same files, an order that matters, or one fix changing what another must do. Approving a batch approves the approach, not the edits. Each task is still built in its own `fix` run, with its own review stop. The one exception is a batch made entirely of P2 cleanup tasks: `/codedetective fix batch <name>` builds them back to back, with every task still going through its own snapshot, tests and cheating check, and stops at the first problem, with one review at the end. P0 and P1 fixes always get their own review.
 
 **Plans are rechecked before building.** Each fix changes code that later plans were written against. Before building a planned task, it compares the plan with the current code. If nothing material changed, it says so and builds. If a target moved or was renamed, the approach no longer fits, more files are needed, or a dependency would be added, it plans that task again and asks for a fresh approval.
 
@@ -307,7 +333,8 @@ It never adds a dependency without your approval, and never commits, pushes, dep
 **It always tells you what comes next.** Every stop ends by saying how many tasks are still open at each priority and asking what you want to do, with the command beside each choice so you can pick it now or type it later:
 
 - If a planned fix is waiting, it offers to build it.
-- If a priority level is finished, it says so ("All P0 tasks are done") and offers to plan the next one. Planning always comes before fixing.
+- If a priority level is finished, it says so ("All P0 and P1 tasks are done") and offers the next stage. Planning always comes before fixing.
+- It always offers to stop, and `/codedetective resume` picks up at the same point later.
 - If nothing is left, it offers a new audit to confirm the standard is met.
 
 When you ask it to commit, open a pull request, or merge (including "merge when CI is green"), it does that, tells you what happened, records it against the fix, and then comes back with the same question. It never goes quiet while fixes are still open.
@@ -367,6 +394,7 @@ references/
   stack-playwright-jsdoc.md
   sources.md                    The standard behind each rule, with lookup links
   tools-by-language.md          Read-only tools for Python, Go, Rust, Ruby, PHP, Java
+  flow.md                       The stages, where each one stops, and what is asked there
   external-review.md            How findings from outside the audit are checked and added
   report-template.md            Report structure, task format, context template
 scripts/
