@@ -39,4 +39,4 @@ How to take findings from somewhere else (another reviewer, another AI's adversa
 - Update Checklist Coverage, the queue and the verdict. A complete run whose queue gains a task becomes **Fixes remaining**; a claim left Probable, Unverified or Decision Needed makes the best verdict **Standard met, with gaps**.
 - Write the External Review section (format in `references/report-template.md`) and add a Progress line.
 - Show the result in the conversation: counts by result, every Confirmed claim with what is wrong and the evidence, every claim missed by the audit, and what was refuted and why. Never cut it to highlights.
-- End with the same closing question as the end of an audit (stop here to read, go through the decisions, plan the fixes), naming the command for each.
+- End with the next-step question from `references/flow.md`, naming the command beside each option.
