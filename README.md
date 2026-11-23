@@ -106,7 +106,7 @@ For React projects, also enable `eslint-plugin-react-hooks` (recommended preset)
 1. Open Claude Code in the repository you want to audit.
 2. Optionally create `.audit/context.md` describing your stack and anything that must never be touched (template in `references/report-template.md`). Five lines here noticeably sharpen the audit.
 3. Run `/codedetective`. It first shows which analyzers are installed and which are missing, and what the audit cannot prove without each one. Install what you want and run it again, or tell it to continue.
-4. It then profiles the project, gathers tool evidence, and runs all four passes without stopping. It pauses only if it has a question it cannot continue without.
+4. It then profiles the project, gathers tool evidence, and runs all four passes without stopping, followed by a challenge: a second reviewer that has not seen the findings tries to find what the first look missed. It pauses only if it has a question it cannot continue without.
 5. Read the full report it shows at the end: every P0, P1 and P2, with what is wrong, where, and the evidence. The same report, with full detail, is saved in `.audit/runs/<date>/code-health-report.md`.
 6. Make your decisions: correct anything it got wrong, answer its open questions, and say which findings you accept as they are.
 7. Run `/codedetective plan` to plan the P0 and P1 fixes together. Nothing is planned or fixed before this point.
@@ -143,8 +143,11 @@ Only `fix` ever changes your code, and only after you approve its plan. `plan` n
 | **Pass 2: Performance** | Measured hot paths, blocking work on the event loop, database access patterns, frontend rendering and bundles, long sessions, cleanup, and graceful shutdown. |
 | **Pass 3: Architecture** | Module boundaries, client and server contracts, type rigor, configuration, test integrity, and observability. |
 | **Pass 4: Code quality** | Complexity, duplication, dead code, suppressions, swallowed errors, inconsistent patterns, outdated framework APIs, and patterns typical of AI-generated code. |
+| **Challenge** | A second, independent look at security, performance and architecture. For each area of the code, a fresh reviewer gets the code and the checklists, without the audit's findings, and is told to prove the area does not meet the standard. |
 
-All four passes run in one go. The audit pauses only for a question it cannot continue without, and it never offers to plan or fix anything along the way. However serious a finding is, it waits for the full report, where it is listed first.
+All four passes and the challenge run in one go. The audit pauses only for a question it cannot continue without, and it never offers to plan or fix anything along the way. However serious a finding is, it waits for the full report, where it is listed first.
+
+**Every audit is challenged before you see it.** A first look can miss things, and a reviewer who only double-checks the reported problems would never notice. So after the four passes, a separate reviewer goes through each area without seeing what was found, looking for problems the first look missed. Whatever it claims is proven or disproved like any other finding. Proven ones join the report marked as missed by the first look, and the report tells you how many there were. This makes an audit take longer, and it is the reason a clean result means more than "we looked and saw nothing".
 
 **Every audit covers the whole codebase.** A new audit examines everything from beginning to end, as if for the first time. It never narrows to recent commits, pull requests or files changed since the last audit, and it never uses an earlier report to decide where to look. To make that checkable, it starts by listing every source file, and the report states how many were examined out of the total and names anything it did not get to, with the reason. An area it did not examine keeps the verdict from reaching "Standard met".
 
@@ -245,7 +248,7 @@ Every report opens with a verdict:
 
 | Verdict | Meaning |
 |---|---|
-| **Audit in progress (Pass N of 4)** | The audit hasn't finished, so no other verdict applies yet. |
+| **Audit in progress (Pass N of 4, or Challenge)** | The audit hasn't finished, so no other verdict applies yet. |
 | **Standard met** | Every applicable checklist item passed or doesn't apply, nothing went unchecked, no decisions are waiting on you, and nothing is left to fix. |
 | **Standard met, with gaps** | Nothing left to fix, but some items couldn't be checked, are suspected but not proven, or a decision is waiting on you. It lists exactly what stands between this and Standard met. |
 | **Fixes remaining** | Fixes remain, counted by priority. It also tells you when no P0 or P1 tasks remain, which is the first milestone. |
@@ -280,7 +283,7 @@ The order is fixed, so what happens next never depends on how the agent decides 
 
 | Stage | What happens | Where it stops |
 |---|---|---|
-| 1. Audit | All four passes, straight through | Only for a question it cannot continue without |
+| 1. Audit | All four passes, then the challenge, straight through | Only for a question it cannot continue without |
 | 2. Report | The full report | Asks: plan the P0 and P1 fixes, go through the decisions, or stop |
 | 3. Decisions | You correct, answer and accept | When you are done |
 | 4. Plan P0 and P1 | One plan for every P0 and P1 fix | For your approval |
@@ -342,7 +345,7 @@ When you ask it to commit, open a pull request, or merge (including "merge when 
 
 ## Safety guarantees
 
-- **The full report comes first.** The audit runs all four passes and shows you everything it found before any fix is planned or offered. `plan` and `fix` refuse to run on an unfinished audit.
+- **The full report comes first.** The audit runs all four passes and the challenge, and shows you everything it found before any fix is planned or offered. `plan` and `fix` refuse to run on an unfinished audit.
 - **Nothing changes without an approved plan.** Every fix is planned and approved before code is touched, and stops for review after.
 - **Read-only investigation.** No edits, installs, fixers, migrations or seeds during the audit. It writes only inside `.audit/`, which it hides from git through `.git/info/exclude`, and analyzers never count anything under `.audit/` as part of your code. One thing it may ask you about: Prettier does not read that git file, so if your project uses Prettier, the tool check offers to add the line `.audit/` to `.prettierignore`. It makes that change only if you say yes.
 - **Secrets stay hidden.** It checks configuration by variable name only and never prints values. Secret scan results report location and type, never the secret.
@@ -396,6 +399,7 @@ references/
   sources.md                    The standard behind each rule, with lookup links
   tools-by-language.md          Read-only tools for Python, Go, Rust, Ruby, PHP, Java
   flow.md                       The stages, where each one stops, and what is asked there
+  challenge.md                  The second, independent look that ends every audit
   external-review.md            How findings from outside the audit are checked and added
   report-template.md            Report structure, task format, context template
 scripts/
@@ -425,7 +429,7 @@ The skill was built and tested in Claude Code. It installs and runs in other age
 
 - **It may start on its own.** In Claude Code the skill runs only when you call it. That is a Claude Code setting (`disable-model-invocation`), and other agents ignore it, so one of them may pick the skill up when you ask a related question. If it does, tell it to stop.
 - **Plan approval happens in the chat.** Without Claude Code's plan mode, the agent shows the plan in the conversation and waits for your go-ahead. It still never edits code before you approve.
-- **The second opinion is weaker.** In Claude Code a separate fresh agent tries to refute each serious finding. Where an agent cannot start one, the same agent does that check itself as a separate step.
+- **The second opinion is weaker, and the verdict says so.** In Claude Code, separate fresh agents try to refute each serious finding and run the challenge. Where an agent cannot start one, the same agent does both itself. A run challenged only by the agent that audited it can reach "Standard met, with gaps" at best, until an outside review you hand in covers it.
 - **The script folder.** The skill refers to its own folder as `${CLAUDE_SKILL_DIR}`. Other agents do not fill that in, and the skill tells the agent to use the folder that holds `SKILL.md` instead.
 - **Frontmatter.** `argument-hint` and `disable-model-invocation` in `SKILL.md` are Claude Code fields. If an agent rejects them, delete those two lines.
 

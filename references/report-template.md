@@ -8,6 +8,7 @@
 - Report structure (`code-health-report.md` in the run folder)
 - Since last audit
 - External review (findings handed in from outside the audit)
+- Challenge (the second, independent look that ends every audit)
 - Final report presentation (what is shown in the conversation when the audit ends)
 - Task schema
 - Progress tracking
@@ -111,7 +112,7 @@ Write `code-health-report.md` in the current run's folder (`.audit/runs/<run-id>
 ```markdown
 # <Project Name>: Code Health & Self-Remediation Plan
 
-**Verdict:** <Audit in progress (Pass N of 4) | Standard met | Standard met, with gaps | Fixes remaining>: <one line with the evidence, e.g. "38 of 48 gated items passed, 7 not applicable, 2 confirmed by developer (SEC-15, ARCH-06), 1 accepted and reconfirmed today (SEC-16), at commit abc123 on 2026-11-06", or open task counts by priority, or "All findings fixed through commit def456; run /codedetective new to confirm the standard is met">
+**Verdict:** <Audit in progress (Pass N of 4, or Challenge) | Standard met | Standard met, with gaps | Fixes remaining>: <one line with the evidence, e.g. "38 of 48 gated items passed, 7 not applicable, 2 confirmed by developer (SEC-15, ARCH-06), 1 accepted and reconfirmed today (SEC-16), at commit abc123 on 2026-11-06", or open task counts by priority, or "All findings fixed through commit def456; run /codedetective new to confirm the standard is met">
 
 ## 0. Progress
 - Run: <run-id>, started <date and time> against commit <short hash>
@@ -123,6 +124,7 @@ Write `code-health-report.md` in the current run's folder (`.audit/runs/<run-id>
 - Pass 2: <...>
 - Pass 3: <...>
 - Pass 4: <...>
+- Challenge: <not started | in progress, areas done: <list> | done on <date>: n areas, n claims, n missed by the first look | self-challenge on <date> (no separate reviewer available) | not run (older version)>
 - Full report presented: <date, or "not yet">
 - Decisions: <n waiting on the developer | all answered on date>
 - External reviews: <none | date, name, n claims: n confirmed (n missed by the audit), n already in the report, n refuted, n not settled>
@@ -196,7 +198,7 @@ One line per gated item (every checklist item except `QUAL-11` to `QUAL-16`, plu
 | QUAL-04 | Passed | Circular import check ran (status `ran`): 0 cycles, in the evidence folder |
 | GAP-Supabase | Unverified | No stack reference; checked against the general checklists only |
 
-Rows cover every gated checklist item, every non-advisory item of each loaded stack reference, one `GAP-<technology>` row per detected technology with no stack reference, and one `COV-<area>` row per area or file left unexamined (section 10). Outcomes: Passed (a Verified Safeguard, or nothing found by a check the row describes), Not Applicable, Confirmed by developer (with what they said and the date), Accepted (with the reason), Finding (with task or section reference), Unverified (with the blocker), Decision Needed. The verdict counts come from this table.
+Rows cover every gated checklist item, every non-advisory item of each loaded stack reference, one `GAP-<technology>` row per detected technology with no stack reference, one `COV-<area>` row per area or file left unexamined (section 10), and a `CHALLENGE-<area>` row for any area the challenge did not cover (section 12). Outcomes: Passed (a Verified Safeguard, or nothing found by a check the row describes), Not Applicable, Confirmed by developer (with what they said and the date), Accepted (with the reason), Finding (with task or section reference), Unverified (with the blocker), Decision Needed. The verdict counts come from this table.
 
 A Passed row is a claim someone may try to break, so it carries its proof of pass: what was examined (the files or areas read, or the tool and its result) and the fact that makes the item pass. A row that says only "checked" or "nothing found" is not a pass; record it as Unverified with the reason.
 
@@ -222,6 +224,23 @@ Only when the developer has handed in findings from outside (`/codedetective rev
 | EXT-03 | SQL injection in search | SEC-08 | Refuted | No | The query is parameterized: server/routes/search.js, line 41 |
 
 A claim is checked against the code before it gets a result; the outside reviewer's word is never the evidence.
+
+## 12. Challenge
+The second, independent look that ends every audit (`references/challenge.md`). First one row per area:
+
+| Area | Files read | Reviewer | Claims | Missed by the first look | Already in the report | Refuted | Not settled |
+|---|---|---|---|---|---|---|---|
+| server/routes | 14 of 14 | separate | 5 | 1 | 2 | 2 | 0 |
+| client/src | 96 of 96 | separate | 2 | 0 | 1 | 1 | 0 |
+
+Then every claim:
+
+| CH | Claim, in one line | Checklist ID | Result | Task or reason |
+|---|---|---|---|---|
+| CH-01 | The export route returns any user's invoices by ID | SEC-03 | Confirmed, missed by the first look (Pass 1, SEC-03) | P0-02 |
+| CH-02 | Search query built by string concatenation | SEC-08 | Refuted | The query is parameterized: server/routes/search.js, line 41 |
+
+"Reviewer" is "separate" for a fresh subagent that never saw the audit, or "same agent" for a self-challenge. A claim is verified against the code before it gets a result; the challenger's word is never the evidence.
 ```
 
 ---
@@ -231,14 +250,14 @@ A claim is checked against the code before it gets a result; the outside reviewe
 When the audit is complete, show this in the conversation, in this order. It is the whole picture the developer decides from, so list every queued task and never cut it down to highlights. Keep each row short; the full traces and tool excerpts stay in the report file.
 
 1. **Verdict:** the verdict line.
-2. **At a glance:** task counts by priority (P0, P1, P2), how many items are Probable or Unverified, how many decisions are waiting on the developer, how many advisory notes there are, and what was examined: the four passes, the stack references loaded, and how many source files were read out of the inventory (for example "412 of 412 files").
+2. **At a glance:** task counts by priority (P0, P1, P2), what the challenge did (areas challenged, claims returned, and how many proven problems the first look had missed), how many items are Probable or Unverified, how many decisions are waiting on the developer, how many advisory notes there are, and what was examined: the four passes, the stack references loaded, and how many source files were read out of the inventory (for example "412 of 412 files").
 3. **P0 Critical**, then **P1 High**, then **P2 Hygiene:** one table for each, with every task in queue order. A priority with no tasks says "None".
 
    | Task | What is wrong | Where | Evidence |
    |---|---|---|---|
    | P0-01 (SEC-03) | Any signed-in user can read another tenant's invoices | server/routes/invoices.js :: getInvoice | Trace: the request's ID reaches `Invoice.findById` with no owner check. Verifier could not refute it. |
 
-   The row above is a format example only. "What is wrong" is one plain sentence a developer outside the project would understand. "Evidence" names the kind of proof and its key fact: the tool and what it reported, the trace's source and sink, the failing test, or the measurement.
+   The row above is a format example only. Mark a task that came from the challenge with "(challenge)" after its ID. "What is wrong" is one plain sentence a developer outside the project would understand. "Evidence" names the kind of proof and its key fact: the tool and what it reported, the trace's source and sink, the failing test, or the measurement.
 4. **Not proven yet:** every Probable and Unverified item, with its ID, what was seen, and the step that would settle it.
 5. **Waiting on you:** every Decision Needed and every question only the developer can answer, each with the choice or fact needed. Then **your earlier decisions**, as the table from section 4: each one with what the code says now, any conflict with another decision, and a keep or reconsider recommendation, Reconsider and conflicts first.
 6. **Not checked:** any files or areas that were not examined and why; each tool that was missing or skipped, with the checklist items it left unproven and how to get it (from the evidence summary); checks that did not happen; and technologies checked only against the general checklists.
@@ -268,7 +287,7 @@ PROGRESS: <Queued | Planned | In progress | Done | Resolved: reason | Blocked: r
 PLAN: <plans/<file>.md in the run folder once a plan is approved, or "none">
 DELIVERY: <"not committed" | commit <short hash> | PR #<n> open | PR #<n> merged; filled in only when the user asks for a commit, pull request or merge>
 CHECK_ID: <Checklist ID, e.g. SEC-03, or PROJ-NN for a project-specific finding>
-SOURCE: <"audit" | external review (<name>, <date>, EXT-NN); either way the evidence below is what the audit gathered itself>
+SOURCE: <"audit" | challenge (<area>, CH-NN) | external review (<name>, <date>, EXT-NN); in every case the evidence below is what the audit gathered itself>
 SUBSYSTEM: <Comma-separated list of affected areas>
 STANDARD: <Security: OWASP Top 10:2025 category and ASVS 5.0 chapter. Others: the source tag on the checklist item (a CWE ID or named practice from sources.md). PROJ-NN: the closest source, or "none">
 TARGET_SYMBOLS:

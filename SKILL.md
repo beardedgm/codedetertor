@@ -16,7 +16,7 @@ The target is what an experienced lead developer calls good clean code:
 The standard for every fix is improvement, not perfection: a good diff measurably improves code health and changes nothing else.
 
 The work happens in a fixed order, and no step starts before the one before it is finished:
-1. **Audit (reconnaissance):** read-only investigation, Phase 0 and all four passes in one go, that produces a report in its own run folder under `.audit/runs/`.
+1. **Audit (reconnaissance):** read-only investigation, Phase 0, all four passes and the challenge in one go, that produces a report in its own run folder under `.audit/runs/`.
 2. **Report and decisions:** the complete report is shown to the user: everything that is wrong and the evidence for it. The user reads it, corrects it and makes their decisions.
 3. **Planning:** fixes for what the user chose, planned for their approval. Still read-only.
 4. **Remediation:** building approved plans, one reviewed task at a time, only when the user explicitly asks.
@@ -43,9 +43,9 @@ Every audit is a **run** with its own folder, so each new audit starts fresh and
       scratch/          measurement harnesses and other throwaway scripts
 ```
 
-The **current run** is the one named in `.audit/current-run`; if that file is missing, it is the newest folder under `.audit/runs/` that is not a legacy run. Paths in this skill and its references that say "the report", "evidence", "plans" or "scratch" mean those folders inside the current run. A run is **complete** when Phase 0 and all four passes are written, **unfinished** before that, and **abandoned** if a new run was started while it was unfinished. Its status is recorded in its report's Progress section.
+The **current run** is the one named in `.audit/current-run`; if that file is missing, it is the newest folder under `.audit/runs/` that is not a legacy run. Paths in this skill and its references that say "the report", "evidence", "plans" or "scratch" mean those folders inside the current run. A run is **complete** when Phase 0, all four passes and the challenge are written, **unfinished** before that, and **abandoned** if a new run was started while it was unfinished. Its status is recorded in its report's Progress section.
 
-**Starting a run.** Create the folder, write its ID to `.audit/current-run`, and start at Phase 0. If an earlier complete run exists, it is the **previous run**: after Pass 4, compare against it (see "Since last audit" in `references/report-template.md`). Never copy findings or tasks from it; every finding in the new run is verified against today's code, and the comparison is matched by checklist ID and location. Do not open the previous run's report before Pass 4 is written: an earlier audit must never decide where this one looks (see "Every audit covers the whole repository").
+**Starting a run.** Create the folder, write its ID to `.audit/current-run`, and start at Phase 0. If an earlier complete run exists, it is the **previous run**: after the challenge, compare against it (see "Since last audit" in `references/report-template.md`). Never copy findings or tasks from it; every finding in the new run is verified against today's code, and the comparison is matched by checklist ID and location. Do not open the previous run's report before the challenge is written: an earlier audit must never decide where this one looks (see "Every audit covers the whole repository").
 
 **Legacy files.** Before anything else, if `.audit/` holds files from before runs existed (such as `.audit/code-health-report.md`, `.audit/evidence/`, `.audit/plans/`, or loose scripts), move everything except `context.md`, `false-positives.md`, `accepted.md`, `current-run` and `runs/` into `.audit/runs/<date>-0000-legacy/`, using the date the old report was last modified. Mention the move in one line. A legacy run is history only: never resume it or fix from it, and use it for the "since last audit" comparison only where its findings map cleanly to checklist IDs.
 
@@ -56,7 +56,7 @@ The **current run** is the one named in `.audit/current-run`; if that file is mi
 | `/codedetective resume` | Pick the current run up at the stage it stopped in: continue an unfinished audit (a stale one gets a question first; see below), show a report that has not been shown yet, or say where the queue stands and ask what comes next. It never starts a fix and never starts a new audit; with nothing to pick up it says so and names `/codedetective new`. See Resume in `references/flow.md`. |
 | `/codedetective` or `/codedetective start` | The same as `resume`, with one difference: if there are no runs, or the current run is complete with nothing left to fix, start a new run. |
 | `/codedetective new` | Always start a new run: a complete, fresh audit of the whole repository from beginning to end. It never resumes, and it never looks only at what changed since the last run. An unfinished current run is marked Abandoned and kept as history. |
-| `/codedetective pass <1-4>` | Run or rerun that pass only, in the current run. It does not make a run complete: that takes all four passes. |
+| `/codedetective pass <1-4>` | Run or rerun that pass only, in the current run. It does not make a run complete: that takes all four passes and the challenge. |
 | `/codedetective plan [P0\|P1\|P2\|TASK-IDs]` | Plan a batch of tasks in plan mode, in priority and dependency order, for one approval. Read-only: changes no code. With no target it plans every open P0 and P1 task together; once none is open, it re-checks the P2 tasks and plans them in groups, as `plan P2` does. Complete runs only. |
 | `/codedetective fix <TASK-ID>` | Plan that one task, get approval, then execute it. Complete runs only, like every `fix` form. |
 | `/codedetective fix` (no ID), or `next` | Plan and execute the next eligible task in queue order. |
@@ -73,6 +73,7 @@ The **current run** is the one named in `.audit/current-run`; if that file is mi
 - Create `.audit/accepted.md` if it does not exist, and move into it any decisions or won't-fix choices the developer already made in the old report, with their reasons.
 - Add any missing task fields (`CHECK_ID`, `PLAN`, `VERIFIER`, `DELIVERY`) from what the task already says, leaving a field as "not recorded" rather than inventing it.
 - Passed rows written before proof of pass was required keep their outcome and are marked "proof not recorded"; say in the verdict line how many there are. Never invent the proof afterwards.
+- A run that finished before the challenge existed stays complete. Record "Challenge: not run (older version)" and add a `CHALLENGE-all` coverage row marked Unverified, so its verdict is "Standard met, with gaps" at best; the next `new` audit includes the challenge.
 - If the report has no Codebase Coverage section, add one that says coverage was not recorded by the version that ran the audit, with a single `COV-all` row marked Unverified. Do not reconstruct coverage from memory.
 - Compute the verdict from the result, and record in the Progress section that the report was upgraded, on what date, and how many items were marked Unverified because the old format never recorded them.
 Say in one line that the report was upgraded. If the upgrade leaves items Unverified that matter, offer to re-run just the pass that covers them.
@@ -97,7 +98,7 @@ Say in one line that the report was upgraded. If the upgrade leaves items Unveri
 
 These exist because an audit agent that breaks things, leaks secrets or touches production has done more harm than any bug it finds.
 
-**Reconnaissance is read-only.** During Phase 0 and Passes 1 to 4, do not edit tracked files, lockfiles, configs, migrations, snapshots or fixtures. Do not install or upgrade packages, run fixers or formatters (including `--fix` modes of any tool), run migrations or seeds, or write speculative patches. You may write anything inside `.audit/` and build into a temp directory outside the repo. Analyzers and findings never include anything under `.audit/`: those are audit artifacts, not the project's code. If dependencies are not installed, do not install them; record the limitation and suggest the user run `npm ci --ignore-scripts` (or the ecosystem equivalent) themselves.
+**Reconnaissance is read-only.** During Phase 0, Passes 1 to 4 and the challenge, do not edit tracked files, lockfiles, configs, migrations, snapshots or fixtures. Do not install or upgrade packages, run fixers or formatters (including `--fix` modes of any tool), run migrations or seeds, or write speculative patches. You may write anything inside `.audit/` and build into a temp directory outside the repo. Analyzers and findings never include anything under `.audit/`: those are audit artifacts, not the project's code. If dependencies are not installed, do not install them; record the limitation and suggest the user run `npm ci --ignore-scripts` (or the ecosystem equivalent) themselves.
 
 **Secrets never reach the transcript.** Never print environment values, `.env` contents, credential stores or key material. To check configuration, list names only (for example `printenv | cut -d= -f1`). When a scan finds a secret, report the file, line and type of secret, never the value. Never use secret scanners in a mode that verifies credentials against live provider APIs.
 
@@ -156,7 +157,7 @@ Every report opens with a verdict, so reaching the standard is stated plainly in
 | Decision Needed (waiting on the developer) | No |
 
 Verdict levels:
-- **Audit in progress (Pass N of 4):** until all four passes are written. Items in passes not yet run have no outcome, so no other verdict applies. Report the open task count by priority alongside it.
+- **Audit in progress (Pass N of 4, or Challenge):** until all four passes and the challenge are written. Items in passes not yet run have no outcome, and a pass nobody has challenged is not yet a pass, so no other verdict applies. Report the open task count by priority alongside it.
 - **Standard met:** the audit is complete, every gated item counts toward Standard met, and the queue has no open tasks. Advisory notes may remain.
 - **Standard met, with gaps:** the audit is complete and the queue is empty, but some items are Probable, Unverified or Decision Needed. List them; they are what stands between this and Standard met.
 - **Fixes remaining:** the audit is complete and open tasks remain. Give counts by priority, and say when no P0 or P1 tasks remain, because that is the first milestone.
@@ -186,13 +187,13 @@ Only an audit can confirm **Standard met**. When fixing empties the queue of a c
 
 Work in phases and append to the report after each, so progress survives if context runs out. For large repositories you may fan out read-only subagents to sweep and locate code, but a subagent's summary is a lead, not evidence; verify it before it gets a tier.
 
-**The audit runs straight through.** Run Phase 0 and Passes 1 to 4 in one go, appending each to the report as it finishes. Do not stop between passes to summarize, and never offer to plan or fix anything before the audit is complete. The developer is promised the whole picture before any change is discussed, and a serious finding does not change that: it leads the final report. Pause only for one of these:
+**The audit runs straight through.** Run Phase 0, Passes 1 to 4 and the challenge in one go, appending each to the report as it finishes. Do not stop between passes to summarize, and never offer to plan or fix anything before the audit is complete. The developer is promised the whole picture before any change is discussed, and a serious finding does not change that: it leads the final report. Pause only for one of these:
 - **A question you cannot answer from the repository and cannot continue without.** Ask it on its own, with no offers attached, then carry on. Anything that can wait (a business choice, a fact only the developer knows) is recorded as a Decision Needed or an Unverified item and asked after the report is presented.
 - **Context running low.** Stop cleanly at the end of the current pass, say which pass is next, and ask only whether to continue. Running `/codedetective` again resumes there.
 
 The setup questions asked before Phase 0 (missing tools, network tools, a stale run) are part of starting, not a pause in the audit. Earlier decisions are not a setup question: they are reviewed in the final report, where the evidence is.
 
-**Every audit covers the whole repository.** A run examines the entire codebase from beginning to end, as if for the first time, whether it is the first audit or the tenth. Never narrow an audit to files changed since an earlier run, to recent commits or pull requests, or to areas where earlier audits found problems, and never skip an area because an earlier run passed it. Do not use `git log`, `git diff` or an earlier report to choose what to examine. The only use of an earlier run is the "Since last audit" comparison, written after Pass 4 from findings this run verified on its own.
+**Every audit covers the whole repository.** A run examines the entire codebase from beginning to end, as if for the first time, whether it is the first audit or the tenth. Never narrow an audit to files changed since an earlier run, to recent commits or pull requests, or to areas where earlier audits found problems, and never skip an area because an earlier run passed it. Do not use `git log`, `git diff` or an earlier report to choose what to examine. The only use of an earlier run is the "Since last audit" comparison, written after the challenge from findings this run verified on its own.
 
 **Make coverage checkable.** In Phase 0, build a **file inventory** from the repository itself (`git ls-files`, or a directory walk outside git): every source file in scope, grouped by area, with counts. Leave out only generated output, vendored code, lockfiles and binary assets, and record what was left out. Every file in the inventory is read at least once during the run, and every pass considers every area; a pass may conclude an area has nothing for it to check, and says so. As each pass finishes, record which areas it examined in the report's Codebase Coverage section (format in `references/report-template.md`), so a resumed audit picks up where it stopped instead of starting over or skipping ahead.
 - On a large repository, fan out read-only subagents by area. Never sample: a sample is not coverage.
@@ -205,6 +206,7 @@ The setup questions asked before Phase 0 (missing tools, network tools, a stale 
 - **Pass 2: Performance & Runtime Behavior.** Read `references/pass-2-performance.md`.
 - **Pass 3: Architecture, Contracts & Test Integrity.** Read `references/pass-3-architecture.md`.
 - **Pass 4: Code Quality & Maintainability.** Read `references/pass-4-quality.md`.
+- **Challenge: a second, independent look.** Read `references/challenge.md`. The verifier only tests findings; nothing so far has tested the passes. After Pass 4, start a fresh subagent for each area of the code and give it the code, the Pass 1 to 3 checklists and the facts about the project, but never the audit's findings or reasoning, with one job: prove that the area does not meet the standard. Each claim it returns is a lead, verified like any other before it counts. A proven one becomes a task marked "Missed by the first look", and the count of misses is reported. Where no subagent can be started, do the second look yourself and record it as a self-challenge; such a run can reach "Standard met, with gaps" at best.
 
 **Stack reference files.** Load only the ones Phase 0 shows apply, and use them alongside every pass. Items in a loaded file are gated like checklist items, except any marked advisory: `references/stack-node-express.md`, `references/stack-react-vite.md`, `references/stack-mongoose.md`, `references/stack-r2-render.md`, `references/stack-playwright-jsdoc.md`. Each was written against versions current in late 2026; compare against the versions you recorded, and treat any claim marked "verify" as Unverified until confirmed in the repo or the official changelog.
 
@@ -215,7 +217,7 @@ The setup questions asked before Phase 0 (missing tools, network tools, a stale 
 
 Write the report using the structure and task schema in `references/report-template.md`.
 
-**End of the audit: present the full report.** When Pass 4 is written, the run is complete. If there is a previous run, write the "Since last audit" comparison. Fill in Checklist Coverage and Codebase Coverage, and compute the verdict. Then show the report in the conversation, in full, using "Final report presentation" in `references/report-template.md`:
+**End of the audit: present the full report.** When the challenge is written, the run is complete. If there is a previous run, write the "Since last audit" comparison. Fill in Checklist Coverage and Codebase Coverage, and compute the verdict. Then show the report in the conversation, in full, using "Final report presentation" in `references/report-template.md`:
 1. The verdict line and the counts.
 2. **Every queued task**, grouped P0, then P1, then P2: its ID, what is wrong in plain words, where it is, and the evidence that proves it. Never cut the list down to highlights or "top findings"; the developer is deciding what to fix and needs all of it. Full traces and tool excerpts stay in the report file.
 3. Probable and Unverified items, each with what would settle it.

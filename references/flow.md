@@ -16,7 +16,7 @@ Record the current stage in the report's Progress section (`Stage:`) and update 
 
 | Stage | What happens in it | It ends when | Then |
 |---|---|---|---|
-| 1. Audit | Phase 0 and Passes 1 to 4, straight through. Read-only. | Pass 4 is written | Stage 2, without asking |
+| 1. Audit | Phase 0, Passes 1 to 4 and the challenge (`references/challenge.md`), straight through. Read-only. | The challenge is written | Stage 2, without asking |
 | 2. Report | The full report is shown in the conversation. | It has been shown | Stop: the closing question |
 | 3. Decisions | The decision step: the developer corrects, answers and accepts. Optional, and they may come back to it at any stop. | They have answered what they want to | Stop: the next-step question |
 | 4. Plan P0 and P1 | One plan covering every open P0 and P1 task, P0 first. Read-only. | The plan is approved | Stop: the next-step question |
@@ -106,7 +106,7 @@ This is a re-check of the listed tasks, not a new pass. Do not go looking for ne
 
 | Where the run stopped | What resume does |
 |---|---|
-| Stage 1, the audit is unfinished | Run the stale-run check, then continue with the next unfinished pass. This counts as approval to continue the audit and nothing else. |
+| Stage 1, the audit is unfinished | Run the stale-run check, then continue with the next unfinished pass, or with the challenge if all four passes are written. This counts as approval to continue the audit and nothing else. |
 | Stage 2, the report has not been shown | Show the full report, then the closing question. |
 | Stage 2, the report was shown and nothing was chosen | Give the verdict and counts in a line or two (the whole report again only if asked), then the closing question. |
 | Stage 3 | List what is still waiting on the developer and carry on with the decision step. |
