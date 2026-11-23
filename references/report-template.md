@@ -31,6 +31,8 @@ The developer can drop this at `.audit/context.md` to sharpen the investigation.
 - Network tools allowed (public vulnerability databases): <yes | no>
 - Audit without these tools (the developer's choice, with the date): <tool names, or "none">
 - `.audit/` added to `.prettierignore` (asked once, only when the project uses Prettier): <yes | no | not needed>
+- Delivery: <automatic | ask> (automatic unless the developer said otherwise; told once, before the first fix, on <date>)
+- Delivery check (<date>): GitHub and `gh` <yes | no>; default branch <name>; merge method <merge | squash>; auto-merge allowed <yes | no>; required checks <names | none>; checks on pull requests <yes | none>; merging is done by <GitHub's auto-merge | the skill at check points | the developer>
 ```
 
 ---
@@ -76,6 +78,12 @@ Approved plans are saved in the current run's `plans/` folder after plan mode, b
 - Approved: <date>
 - Against commit: <short hash>
 - Tasks (batch only): <ordered TASK-IDs, noting any prerequisites pulled in>
+- Pull requests: <how many this plan opens>
+
+| PR | Branch | Title | Tasks | Depends on | Needs from you |
+|---|---|---|---|---|---|
+| 1 | codedetective/p0-01-invoice-owner | P0-01: check the owner before returning an invoice | P0-01 | none | nothing |
+| 2 | codedetective/p1-02-login-rate-limit | P1-02: rate limit login attempts | P1-02 | none | nothing |
 
 ## Interactions (batch only)
 <shared files or symbols, required order, one fix changing what another must do, combined risk>
@@ -96,11 +104,13 @@ The P2 group plan has an overview file, `plans/p2-groups.md`, and one batch file
 - Approved: <date>
 - Against commit: <short hash>
 - Re-check: <n still valid, n changed, n resolved by earlier work, n no longer apply>
+- Pull requests: <how many this plan opens; one per group>
 
-| Order | Group | Checklist item | Area | Tasks | Files | Builds after |
-|---|---|---|---|---|---|---|
-| 1 | p2-dead-code-server | QUAL-03 | server | P2-04, P2-05, P2-09 | 6 | none |
-| 2 | p2-duplication-client | QUAL-02 | client/src/features | P2-01, P2-07 | 4 | p2-dead-code-server |
+| PR | Group and branch (`codedetective/<group>`) | Title | Area | Tasks | Files | Depends on | Needs from you |
+|---|---|---|---|---|---|---|---|
+| 1 | p2-dead-code-server | Remove dead code in the server | server | P2-04, P2-05, P2-09 | 6 | none | nothing |
+| 2 | p2-duplication-client | Share the duplicated form logic | client/src/features | P2-01, P2-07 | 4 | PR 1 | nothing |
+| 3 | p2-deps-genai | Upgrade the AI client package | server | P2-11 | 2 | none | your approval of the version, and one check with a real key |
 ```
 
 ---
@@ -130,6 +140,7 @@ Write `code-health-report.md` in the current run's folder (`.audit/runs/<run-id>
 - External reviews: <none | date, name, n claims: n confirmed (n missed by the audit), n already in the report, n refuted, n not settled>
 - Remediation: <n of m tasks done; open tasks by priority (P0 n, P1 n, P2 n); next eligible task ID; the next step and its command>
 - Active batch plan: <plans/batch-<name>.md, tasks remaining | none>
+- Open pull requests: <none | #n (task or group; checks running, green, or failing), ...>
 
 ## 1. Codebase Familiarization & Baseline
 - **Git State:** commit hash, working tree status, pre-existing changes.
@@ -285,7 +296,7 @@ STATUS: <Confirmed | Preventive>
 PRIORITY: <P0 | P1 | P2>
 PROGRESS: <Queued | Planned | In progress | Done | Resolved: reason | Blocked: reason>
 PLAN: <plans/<file>.md in the run folder once a plan is approved, or "none">
-DELIVERY: <"not committed" | commit <short hash> | PR #<n> open | PR #<n> merged; filled in only when the user asks for a commit, pull request or merge>
+DELIVERY: <not delivered | branch <name>, commit <short hash> | PR #<n> open, merges by <GitHub auto-merge | the skill | the developer> | PR #<n> merged <short hash> | PR #<n> blocked: <reason>>
 CHECK_ID: <Checklist ID, e.g. SEC-03, or PROJ-NN for a project-specific finding>
 SOURCE: <"audit" | challenge (<area>, CH-NN) | external review (<name>, <date>, EXT-NN); in every case the evidence below is what the audit gathered itself>
 SUBSYSTEM: <Comma-separated list of affected areas>

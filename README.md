@@ -110,8 +110,8 @@ For React projects, also enable `eslint-plugin-react-hooks` (recommended preset)
 5. Read the full report it shows at the end: every P0, P1 and P2, with what is wrong, where, and the evidence. The same report, with full detail, is saved in `.audit/runs/<date>/code-health-report.md`.
 6. Make your decisions: correct anything it got wrong, answer its open questions, and say which findings you accept as they are.
 7. Run `/codedetective plan` to plan the P0 and P1 fixes together. Nothing is planned or fixed before this point.
-8. Approve the plan, then run `/codedetective fix` to build one fix at a time, reviewing each.
-9. When the P0 and P1 fixes are done, run `/codedetective plan P2`. It re-checks the P2 tasks against the changed code and plans them in small groups.
+8. Approve the plan, then run `/codedetective fix all`. Each fix is built, proven and sent out as its own pull request that merges when its checks pass, and the next one starts right away. Use `/codedetective fix` to build just one.
+9. When the P0 and P1 fixes are done, run `/codedetective plan P2`. It re-checks the P2 tasks against the changed code and plans them in small groups, one pull request per group.
 
 You can stop at any point. `/codedetective resume` picks up where you left off.
 
@@ -126,9 +126,10 @@ You can stop at any point. `/codedetective resume` picks up where you left off.
 | `/codedetective plan` | Plans all P0 and P1 tasks together in plan mode, for one approval. Changes no code. |
 | `/codedetective plan P2` | Re-checks the P2 tasks against the code as it stands now, then plans them in small groups, for one approval. |
 | `/codedetective plan <P0\|P1\|TASK-IDs>` | Plans one tier, or a list of tasks such as `P0-01 P1-03`. |
-| `/codedetective fix <TASK-ID>` | Plans that one task, waits for your approval, fixes it, then stops for review. |
+| `/codedetective fix <TASK-ID>` | Plans that one task, waits for your approval, fixes it, sends it out as a pull request, then stops. |
 | `/codedetective fix` | Same, for the next eligible task in priority order. |
-| `/codedetective fix batch <name>` | Builds every task in an approved P2 group back to back, with one review at the end. Stops at the first problem. |
+| `/codedetective fix all` | Builds everything with an approved plan, in order. Each P0 or P1 fix and each P2 group goes out as its own pull request, and the next starts without waiting for the merge. Stops only at a problem. |
+| `/codedetective fix batch <name>` | Builds every task in one approved P2 group back to back and sends the group out as one pull request. Stops at the first problem. |
 | `/codedetective review <file>` | Takes findings from outside, such as another reviewer's or another AI's, into the current audit. Each one is checked against your code and proven or refuted before it can become a task. Changes no code. |
 | `/codedetective status` | Reports the verdict, progress and counts, and lists past audits with their verdicts. Changes nothing. |
 
@@ -286,16 +287,16 @@ The order is fixed, so what happens next never depends on how the agent decides 
 | 1. Audit | All four passes, then the challenge, straight through | Only for a question it cannot continue without |
 | 2. Report | The full report | Asks: plan the P0 and P1 fixes, go through the decisions, or stop |
 | 3. Decisions | You correct, answer and accept | When you are done |
-| 4. Plan P0 and P1 | One plan for every P0 and P1 fix | For your approval |
-| 5. Fix P0 and P1 | One fix at a time | After each fix, for your review |
+| 4. Plan P0 and P1 | One plan for every P0 and P1 fix, listed as pull requests | For your approval |
+| 5. Fix P0 and P1 | One fix at a time, each sent out as its own pull request | Only at a problem, then once when all are done |
 | 6. P2 re-check | Every P2 task is checked again against the changed code and sorted into groups | Goes straight on |
-| 7. Plan P2 | One plan listing every group | For your approval |
-| 8. Fix P2 | One group at a time | After each group, for your review |
+| 7. Plan P2 | One plan listing every group as a pull request | For your approval |
+| 8. Fix P2 | One group at a time, each sent out as one pull request | Only at a problem, then once when all are done |
 | 9. Finished | Says every finding is fixed | Offers a new audit to confirm |
 
 P0 and P1 always come first. P2 waits until they are done, because those fixes change the code the P2 work would be planned against. Some P2 tasks turn out to be already resolved by then; the re-check closes them with the evidence.
 
-A P2 group is one kind of change in one area of the code, at most about ten tasks, with tasks that touch the same files kept together. Each group is small enough to be one pull request.
+A P2 group is one kind of change in one area of the code, at most about ten tasks, with tasks that touch the same files kept together. A group is a pull request. A task that upgrades a package, or needs something from you such as a key, gets a pull request of its own so it cannot hold up the others. The plan tells you how many pull requests it will open and lists them.
 
 ## How planning works
 
@@ -305,13 +306,13 @@ Every plan names the files and functions it will change, what changes in each, t
 
 **One task at a time.** `/codedetective fix` plans the task, waits for your approval, then builds it.
 
-**A batch.** `/codedetective plan` lays out the P0 and P1 tasks, and `/codedetective plan P2` each P2 group, in the order they must be built, with a short plan for each and a section on how they interact: fixes that touch the same files, an order that matters, or one fix changing what another must do. Approving a batch approves the approach, not the edits. Each task is still built in its own `fix` run, with its own review stop. The one exception is a batch made entirely of P2 cleanup tasks: `/codedetective fix batch <name>` builds them back to back, with every task still going through its own snapshot, tests and cheating check, and stops at the first problem, with one review at the end. P0 and P1 fixes always get their own review.
+**A batch.** `/codedetective plan` lays out the P0 and P1 tasks, and `/codedetective plan P2` each P2 group, in the order they must be built, with a short plan for each and a section on how they interact: fixes that touch the same files, an order that matters, or one fix changing what another must do. Approving a plan approves the approach and the pull requests it lists, not the edits: every task still goes through all of its checks, and a problem stops the run. `/codedetective fix all` then builds everything in order, and `/codedetective fix batch <name>` builds one P2 group.
 
 **Plans are rechecked before building.** Each fix changes code that later plans were written against. Before building a planned task, it compares the plan with the current code. If nothing material changed, it says so and builds. If a target moved or was renamed, the approach no longer fits, more files are needed, or a dependency would be added, it plans that task again and asks for a fresh approval.
 
 ## How fixes work
 
-Each `fix` run handles exactly one task and then stops. For every fix it:
+Fixes are built one task at a time. `fix` builds one and stops; `fix all` keeps going through everything you approved. For every fix it:
 
 1. Gets an approved plan first: a new one, or a batch plan that passed the recheck.
 2. Re-reads the target code, since line numbers drift as earlier fixes land.
@@ -328,11 +329,22 @@ Each `fix` run handles exactly one task and then stops. For every fix it:
 
    It flags for your review any suppression that does carry a reason, removed assertions, empty catch blocks, and manifest changes. It never undoes anything that was in the snapshot.
 9. Reruns the evidence script into its own folder and records a before-and-after table, so the original evidence is never overwritten.
-10. Marks the task done in the report, shows you the proof, and waits for your review.
+10. Marks the task done in the report and shows you the proof.
+11. Sends it out: commits it on its own branch, pushes, and opens a pull request that merges when its checks pass. Then it goes straight on to the next fix.
 
 **Done means proven.** A fix is marked done only when every verification command was run after the last edit and passed, the regression test failed before the fix and passes after it, the diff check passed, and the task's done criteria are met. It shows you that proof in the conversation: each command and its result, the test before and after, the diff check, and the before-and-after evidence table. It never reports a result from memory. If a check failed or could not be run, the task stays open or is marked blocked, with the reason.
 
-It never adds a dependency without your approval, and never commits, pushes, deploys or opens a pull request unless you ask.
+**Every fix leaves as a pull request.** A fix that is proven but still sitting in your working folder is not finished, so nothing is left behind:
+
+- Each P0 or P1 fix is its own pull request, and each P2 group is one pull request.
+- It does not wait for the merge. It switches merging on and starts the next fix, and it checks its open pull requests before each new fix, at every stop and on `resume`.
+- If a check fails because of the fix, it fixes the cause and pushes, at most twice, and never by weakening a test or a check. After that it stops and tells you.
+- It waits for merges in only two places: before a new audit that confirms the result, and before calling the run finished.
+- It never includes your own uncommitted work in a commit, never pushes to your main branch directly, never force-pushes, never merges over a failed check, and never deploys.
+
+This is on by default. Before the first fix in a project it tells you so, reminds you that a merge to your main branch may deploy, and lets you switch to being asked each time. It also checks how your repository is set up, because GitHub's own auto-merge only waits for checks you have marked as required: without any, it would merge at once. In that case the skill does the merging itself, once every check is green.
+
+It never adds a dependency without your approval.
 
 **It always tells you what comes next.** Every stop ends by saying how many tasks are still open at each priority and asking what you want to do, in a box of choices you can click where your agent has one, with the command beside each choice so you can pick it now or type it later:
 
@@ -341,12 +353,13 @@ It never adds a dependency without your approval, and never commits, pushes, dep
 - It always offers to stop, and `/codedetective resume` picks up at the same point later.
 - If nothing is left, it offers a new audit to confirm the standard is met.
 
-When you ask it to commit, open a pull request, or merge (including "merge when CI is green"), it does that, tells you what happened, records it against the fix, and then comes back with the same question. It never goes quiet while fixes are still open.
+If you have switched delivery to "ask", it offers to commit, open a pull request and merge after each fix, and does exactly what you ask. Either way it tells you what happened, records it against the fix, and comes back with the same question. It never goes quiet while fixes are still open.
 
 ## Safety guarantees
 
 - **The full report comes first.** The audit runs all four passes and the challenge, and shows you everything it found before any fix is planned or offered. `plan` and `fix` refuse to run on an unfinished audit.
-- **Nothing changes without an approved plan.** Every fix is planned and approved before code is touched, and stops for review after.
+- **Nothing changes without an approved plan.** Every fix is planned and approved before code is touched, and the plan lists the pull requests it will open.
+- **Delivery has hard limits.** It never deploys, never pushes to your main branch, never force-pushes, never merges over a failed check, and never commits your own uncommitted work. You can switch automatic delivery off.
 - **Read-only investigation.** No edits, installs, fixers, migrations or seeds during the audit. It writes only inside `.audit/`, which it hides from git through `.git/info/exclude`, and analyzers never count anything under `.audit/` as part of your code. One thing it may ask you about: Prettier does not read that git file, so if your project uses Prettier, the tool check offers to add the line `.audit/` to `.prettierignore`. It makes that change only if you say yes.
 - **Secrets stay hidden.** It checks configuration by variable name only and never prints values. Secret scan results report location and type, never the secret.
 - **Nothing touches production.** Tests, builds and measurement scripts run only after it confirms that every database is local or in-memory and every third-party service is mocked. Anything it cannot confirm, it skips and reports.
@@ -400,6 +413,7 @@ references/
   tools-by-language.md          Read-only tools for Python, Go, Rust, Ruby, PHP, Java
   flow.md                       The stages, where each one stops, and what is asked there
   challenge.md                  The second, independent look that ends every audit
+  delivery.md                   How every fix leaves as a pull request, and what happens when a check fails
   external-review.md            How findings from outside the audit are checked and added
   report-template.md            Report structure, task format, context template
 scripts/
