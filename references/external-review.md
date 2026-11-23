@@ -4,7 +4,7 @@ How to take findings from somewhere else (another reviewer, another AI's adversa
 
 ## When it applies
 
-- Only on a complete run (all four passes written). On an unfinished run, change nothing: say the audit has to finish first, and offer to continue it. With no run at all, say there is nothing to add to and offer `/codedetective new`.
+- Only on a complete run (all four passes and the challenge written). On an unfinished run, change nothing: say the audit has to finish first, and offer to continue it. With no run at all, say there is nothing to add to and offer `/codedetective new`.
 - It never starts a new audit, and it is read-only like the audit itself: no code changes, no plans, no fixes.
 - It works before or after fixes have started. After fixes have started, confirmed claims join the open tasks.
 - The source is a file path given as the argument, or text pasted into the conversation. If neither is there, ask for it.
