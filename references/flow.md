@@ -4,6 +4,7 @@ A run moves through the stages below, in this order. This file is the one place 
 
 ## Contents
 - Stages
+- How to ask
 - The closing question (after the full report)
 - The next-step question (every other stop)
 - P2 re-check and groups
@@ -31,11 +32,22 @@ Rules that hold across stages:
 - **A task that appears later goes to the stage its priority belongs to.** An outside review, a reversed decision or a finding that came back can add a task at any time. If a P0 or P1 task appears during stages 6 to 8, finish the task in hand, say what appeared, and return to stage 4.
 - **Reading never needs permission; changing always does.** Stages 1, 2, 4, 6 and 7 change no code. No code changes without an approved plan, and only `fix` builds one.
 
+## How to ask
+
+Every question in this skill that offers choices is asked with the agent's question tool, the one that shows the developer a box of choices to pick from (`AskUserQuestion` in Claude Code). Never write the choices as a numbered list in the message when that tool exists. This covers the closing question, the next-step question, the setup question, the stale-run question and any decision that is a choice between options.
+
+- **Message first, then the tool.** Say where the run stands in the message, then call the tool. Do not repeat the options as text, and do not end the message with "What next?" followed by a list.
+- **Two to four options.** That is what the tool takes. Put the option that continues the main path first and Stop last. When more than four apply, keep the main path, "Go through the decisions" if any are waiting, and Stop, and name the others in one line of the message; the developer can always type a different answer.
+- **Short labels.** A label is a few words ("Build group 1", "Plan the P0 and P1 fixes", "Stop here"). The option's description is one short line that names the command and says what will happen. Anything longer, such as what a group contains or which pull request is still open, belongs in the message above, not in the option.
+- **A short header**, such as "Next step".
+- **Several questions at once** (the grouped decision questions) go in one call when the tool allows it. A question that needs a typed answer, not a choice, is asked in the message.
+- **No such tool, or the call fails:** write the same choices as a short numbered list, each with its command. This is the fallback, never the default.
+
 ## The closing question (after the full report)
 
 If the verdict is Standard met, say so plainly and offer only to stop or to review the advisory notes.
 
-Otherwise ask one question, multiple choice when available, with the options in this order:
+Otherwise ask one question with the question tool (see How to ask), with the options in this order:
 1. **Plan the P0 and P1 fixes** (`/codedetective plan`), when any P0 or P1 task is open. Say how many there are and that planning changes no code. When none is open but P2 tasks are, offer **Re-check and group the P2 fixes** (`/codedetective plan P2`) here instead.
 2. **Go through the decisions**, when any question, Decision Needed or earlier decision is waiting. Say how many.
 3. **Stop here so I can read it.** Say that everything is saved and that `/codedetective resume` picks up at this point.
@@ -48,7 +60,7 @@ Every stop after the closing question ends the same way, so the developer is nev
 
 First say where the run stands: the stage, how many tasks are open at each priority, and which of them have an approved plan. If a priority level, a plan or a group was just finished, say so plainly ("All P0 and P1 tasks are done").
 
-Then ask one question, multiple choice when available, with the command beside each option so it can be chosen now or typed in a later session. Build the options from the state of the run:
+Then ask one question with the question tool (see How to ask), naming the command in each option's description so it can be chosen now or typed in a later session. Build the options from the state of the run:
 
 | State of the run | Offer |
 |---|---|

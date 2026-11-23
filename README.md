@@ -331,7 +331,7 @@ Each `fix` run handles exactly one task and then stops. For every fix it:
 
 It never adds a dependency without your approval, and never commits, pushes, deploys or opens a pull request unless you ask.
 
-**It always tells you what comes next.** Every stop ends by saying how many tasks are still open at each priority and asking what you want to do, with the command beside each choice so you can pick it now or type it later:
+**It always tells you what comes next.** Every stop ends by saying how many tasks are still open at each priority and asking what you want to do, in a box of choices you can click where your agent has one, with the command beside each choice so you can pick it now or type it later:
 
 - If a planned fix is waiting, it offers to build it.
 - If a priority level is finished, it says so ("All P0 and P1 tasks are done") and offers the next stage. Planning always comes before fixing.
