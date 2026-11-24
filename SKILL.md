@@ -34,6 +34,7 @@ Every audit is a **run** with its own folder, so each new audit starts fresh and
   context.md            developer context, shared by all runs
   false-positives.md    refuted findings, shared by all runs
   accepted.md           accepted items with the developer's reasons, shared by all runs
+  history.json          findings and fixes across runs, shared by all runs
   current-run           one line: the ID of the current run
   runs/
     <run-id>/           e.g. 2026-11-04-1150 (local date and time the run started)
@@ -41,13 +42,14 @@ Every audit is a **run** with its own folder, so each new audit starts fresh and
       evidence/
       plans/
       scratch/          measurement harnesses and other throwaway scripts
+      external/         outside reviews saved with secrets removed
 ```
 
 The **current run** is the one named in `.audit/current-run`; if that file is missing, it is the newest folder under `.audit/runs/` that is not a legacy run. Paths in this skill and its references that say "the report", "evidence", "plans" or "scratch" mean those folders inside the current run. A run is **complete** when Phase 0, all four passes and the challenge are written, **unfinished** before that, and **abandoned** if a new run was started while it was unfinished. Its status is recorded in its report's Progress section.
 
-**Starting a run.** Create the folder, write its ID to `.audit/current-run`, and start at Phase 0. If an earlier complete run exists, it is the **previous run**: after the challenge, compare against it (see "Since last audit" in `references/report-template.md`). Never copy findings or tasks from it; every finding in the new run is verified against today's code, and the comparison is matched by checklist ID and location. Do not open the previous run's report before the challenge is written: an earlier audit must never decide where this one looks (see "Every audit covers the whole repository").
+**Starting a run.** Create the folder, write its ID to `.audit/current-run`, and start at Phase 0. If an earlier complete run exists, it is the **previous run**: after the challenge, compare against it using `scripts/history.mjs` (see `references/history.md` and "Since last audit" in `references/report-template.md`). Never copy findings or tasks from it; every finding in the new run is verified against today's code, and the comparison is matched by checklist ID and location. Do not open `.audit/history.json` or the previous run's report before the challenge is written: an earlier audit must never decide where this one looks (see "Every audit covers the whole repository").
 
-**Legacy files.** Before anything else, if `.audit/` holds files from before runs existed (such as `.audit/code-health-report.md`, `.audit/evidence/`, `.audit/plans/`, or loose scripts), move everything except `context.md`, `false-positives.md`, `accepted.md`, `current-run` and `runs/` into `.audit/runs/<date>-0000-legacy/`, using the date the old report was last modified. Mention the move in one line. A legacy run is history only: never resume it or fix from it, and use it for the "since last audit" comparison only where its findings map cleanly to checklist IDs.
+**Legacy files.** Before anything else, if `.audit/` holds files from before runs existed (such as `.audit/code-health-report.md`, `.audit/evidence/`, `.audit/plans/`, or loose scripts), move everything except `context.md`, `false-positives.md`, `accepted.md`, `history.json`, `current-run` and `runs/` into `.audit/runs/<date>-0000-legacy/`, using the date the old report was last modified. Mention the move in one line. A legacy run is history only: never resume it or fix from it, and use it for the "since last audit" comparison only where its findings map cleanly to checklist IDs.
 
 ## Modes
 
@@ -72,7 +74,7 @@ The **current run** is the one named in `.audit/current-run`; if that file is mi
 **Runs in an older report format.** Before resuming, fixing, planning or reporting status on a run, compare its report with the current structure in `references/report-template.md`. If it is missing sections (for example the verdict line, Decisions Needed, Since Last Audit or Checklist Coverage), add them once, in place, before doing anything else. Do not redo finished passes to do it:
 - Fill Checklist Coverage from what the report already records: findings and tasks become Finding, recorded safeguards become Passed, recorded not-applicable items become Not Applicable. Any gated item in a finished pass that the old report never recorded an outcome for becomes Unverified ("not recorded in this run's format"); never guess an outcome. Items in passes not yet run stay empty.
 - Create `.audit/accepted.md` if it does not exist, and move into it any decisions or won't-fix choices the developer already made in the old report, with their reasons.
-- Add any missing task fields (`CHECK_ID`, `PLAN`, `VERIFIER`, `DELIVERY`) from what the task already says, leaving a field as "not recorded" rather than inventing it.
+- Add any missing task fields (`CHECK_ID`, `SOURCE`, `PLAN`, `VERIFIER`, `DELIVERY`) from what the task already says, leaving a field as "not recorded" rather than inventing it.
 - Passed rows written before proof of pass was required keep their outcome and are marked "proof not recorded"; say in the verdict line how many there are. Never invent the proof afterwards.
 - A run that finished before the challenge existed stays complete. Record "Challenge: not run (older version)" and add a `CHALLENGE-all` coverage row marked Unverified, so its verdict is "Standard met, with gaps" at best; the next `new` audit includes the challenge.
 - If the report has no Codebase Coverage section, add one that says coverage was not recorded by the version that ran the audit, with a single `COV-all` row marked Unverified. Do not reconstruct coverage from memory.
@@ -218,7 +220,7 @@ The setup questions asked before Phase 0 (missing tools, network tools, a stale 
 
 Write the report using the structure and task schema in `references/report-template.md`.
 
-**End of the audit: present the full report.** When the challenge is written, the run is complete. If there is a previous run, write the "Since last audit" comparison. Fill in Checklist Coverage and Codebase Coverage, and compute the verdict. Then show the report in the conversation, in full, using "Final report presentation" in `references/report-template.md`:
+**End of the audit: present the full report.** When the challenge is written, the run is complete. Write the run's verified findings and run `scripts/history.mjs record-run` (`references/history.md`) to write the "Since last audit" comparison (route any `circle` findings to Decisions Needed instead of queuing another fix). Fill in Checklist Coverage and Codebase Coverage, and compute the verdict. Then show the report in the conversation, in full, using "Final report presentation" in `references/report-template.md`:
 1. The verdict line and the counts.
 2. **Every queued task**, grouped P0, then P1, then P2: its ID, what is wrong in plain words, where it is, and the evidence that proves it. Never cut the list down to highlights or "top findings"; the developer is deciding what to fix and needs all of it. Full traces and tool excerpts stay in the report file.
 3. Probable and Unverified items, each with what would settle it.
@@ -235,7 +237,7 @@ Then stop. This is the developer's time to read and decide. Do not start plannin
 - **Findings they choose not to fix.** Recorded as Accepted with their reason; the task leaves the queue.
 - **Earlier decisions.** For each one the report lists, they keep it, reverse it or update its reason, and say which side of any conflict is true. A reversed decision becomes a queued task, or a Decision Needed if its fix depends on a choice. Update `.audit/accepted.md` with the outcome and today's date.
 
-Recompute the verdict after their answers and say what changed. Planning covers only what is still in the queue. End the decision step with the next-step question.
+Recompute the verdict after their answers and say what changed. Sync accepted items, settled circles and reversed decisions in `.audit/history.json` using `scripts/history.mjs set-status` (`references/history.md`). Planning covers only what is still in the queue. End the decision step with the next-step question.
 
 ## Planning
 
@@ -247,7 +249,7 @@ Plans are where the user reviews a fix before any code changes, so a plan must b
 
 **Save approved plans.** Plan mode keeps its own plan file, which does not survive sessions, so after approval copy the plan into the current run's `plans/<TASK-ID>.md` (or `plans/batch-<name>.md`), link it from the task's `PLAN` field, and set the task's progress to Planned.
 
-**Single-task plan (inside `fix`).** Covers one task. On approval, execute it under the remediation rules below. If the user asks for changes, revise and resubmit; nothing is edited until a version is approved.
+**Single-task plan (inside `fix`).** Covers one task. Check target history with `scripts/history.mjs lookup` (`references/history.md`) before writing the plan. On approval, execute it under the remediation rules below. If the user asks for changes, revise and resubmit; nothing is edited until a version is approved.
 
 **What `plan` covers.** With no target, every open P0 and P1 task in one plan, P0 first. P2 tasks are planned last: `plan P2` (or `plan` once no P0 or P1 task is open) re-checks every open P2 task against the code as it now stands, closes those that earlier fixes resolved, sorts the rest into groups small enough to be one pull request each, and submits one plan listing every group, following `references/flow.md`. `plan P0`, `plan P1` and `plan <TASK-IDs>` plan exactly what they name.
 
@@ -256,7 +258,7 @@ Plans are where the user reviews a fix before any code changes, so a plan must b
 **Batch plan (`plan` mode).** Covers a tier, a P2 group or a named set of tasks:
 1. Select the tasks and add any unfinished prerequisites they depend on, marking which were pulled in.
 2. Order them by prerequisites first, then priority.
-3. Read the current code for every task, then write one plan: the build order, a short per-task plan, and a section on interactions between tasks (shared files or symbols, an order that matters, one fix that changes what another must do, combined risk).
+3. Read the current code for every task, run `scripts/history.mjs lookup` (`references/history.md`) on each target to check for earlier fixes or comebacks, then write one plan: the build order, a short per-task plan, and a section on interactions between tasks (shared files or symbols, an order that matters, one fix that changes what another must do, combined risk).
 4. On approval, save it and mark every included task Planned. Then stop with the next-step question. Approving a batch plan approves the approach and the pull requests it lists, not the edits: each task still goes through every remediation step, and a problem stops the run.
 
 **Drift check before building a planned task.** Earlier fixes change the code a later plan was written against. Before building a task that already has an approved plan, re-read its targets and compare. The plan is still valid unless there is a material change: a target symbol moved, was renamed or was deleted; the approach no longer fits; the fix now needs files beyond the plan; the regression test cannot be written as planned; or a dependency would be added. With no material change, say in one line that the approved plan still holds and build it. With a material change, enter plan mode again for that task and get a fresh approval.
@@ -274,7 +276,7 @@ Plans are where the user reviews a fix before any code changes, so a plan must b
 9. Run the task's verification commands under the same isolation rules as reconnaissance, after the last edit to the code. A failing command means the fix is not finished: find the cause, or stop and report the blocker. Never mark a task done over a failure. One exception is not a failure of the fix: a project command that fails only on files under `.audit/` is tripping over the audit's own data. Run it again limited to tracked files, say that this happened, and tell the developer how to make that tool ignore `.audit/`.
 10. Run `node "${CLAUDE_SKILL_DIR}/scripts/check-diff.mjs" --base <snapshot ID>`, adding `--allow <file>` for each config file the approved plan names. It fails if this fix adds test skips or focus markers, a suppression comment without a written reason (`@ts-ignore` and `@ts-nocheck` always fail), disabled TLS checks, `--no-verify`, a deleted test file or a test moved out of the test paths, or an unplanned change to a config file that can switch checks off. It flags for review a suppression with a written reason, removed assertions, empty catch blocks and manifest changes; each needs a stated justification in the task. A failure means the fix is rejected: undo only this fix's offending change (never anything that was in the snapshot) and find a real fix, or stop and report the blocker.
 11. Rerun the evidence script with `--out .audit/runs/<run-id>/evidence/after-<TASK-ID> --compare <the previous evidence folder>`, so the baseline that findings cite is never overwritten, and record the change table in the task. A fix that makes a count worse needs a stated reason.
-12. Mark the task done only when it is proven (see "Proof of done"), record the verification results in the report, and recompute the verdict. Then deliver it (see Delivery). With automatic delivery, say the result, the proof in brief and the pull request in a line or two; under `fix all` or `fix batch` go straight on to the next task, and otherwise stop with the next-step question. With delivery set to ask, stop, show the proof, and ask the user to review before the next task.
+12. Mark the task done only when it is proven (see "Proof of done"), record the verification results in the report, and recompute the verdict. Then deliver it (see Delivery) and record the fix with `scripts/history.mjs record-fix` (`references/history.md`). With automatic delivery, say the result, the proof in brief and the pull request in a line or two; under `fix all` or `fix batch` go straight on to the next task, and otherwise stop with the next-step question. With delivery set to ask, record the fix once proven, update it with `--commit` once committed, stop, show the proof, and ask the user to review before the next task.
 
 **Proof of done.** A task is Done only when all of this is true, and you saw each result yourself in this session, after the last edit to the code:
 - every verification command in the task ran and passed;

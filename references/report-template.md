@@ -182,12 +182,15 @@ Record the developer's answer for each (kept, reversed, or updated) with the dat
 Judgment findings from Pass 4. For each: the checklist ID, location, the issue, the concrete simpler alternative, and its rough diff size. These never count against the verdict; the developer may promote any into the queue as P2.
 
 ## 6. Since Last Audit
-Only when there is a previous run. Match findings by checklist or stack ID plus file and function or symbol (never line numbers, which drift), and `PROJ` findings by file, symbol and description, after every finding in this run has been verified on its own. List:
-- **Fixed:** in the previous run, not found now (note whether its task was marked Done).
+Only when there is a previous run. After the challenge finishes, run `scripts/history.mjs record-run` (`references/history.md`) so runs match deterministically by checklist ID, symbol, git renames and recorded fix renames (never by line numbers). Summarize its output:
+- **Circle:** came back a second time, or fixing A caused B and fixing B brought A back. Route to Section 4 (Decisions Needed) with the chain or comeback count and commits instead of queuing another fix.
+- **Came back (Regressed):** recorded fixed in an earlier run, found again now (`fixedBy` and `changedSince`). Flag in the queue and rank ahead of other tasks of the same priority.
+- **Follows a fix:** new finding in code created or changed by an earlier fix (name the task and commit).
 - **Still open:** found in both runs.
-- **Regressed:** a task marked Done in the previous run, found again now. Flag these in the queue and rank them ahead of other tasks of the same priority.
-- **New:** found now, not in the previous run.
-- **Not compared:** previous findings that could not be matched (changed IDs, a legacy run, moved code).
+- **New:** found now, not in earlier runs.
+- **Fixed:** recorded fixed earlier, not found now.
+- **Settled / Accepted:** carried status from `.audit/history.json`, re-verified against today's code.
+- **Gone / Not compared:** earlier open finding not seen now with no recorded fix (`gone` if the file still exists; `not-compared` if the file disappeared without a git rename, or from an unmatched legacy run).
 
 ## 7. Top Systemic Risks
 Up to five highest-impact Confirmed risks. If fewer than five meet the bar, list only those.
@@ -209,7 +212,7 @@ One line per gated item (every checklist item except `QUAL-11` to `QUAL-16`, plu
 | QUAL-04 | Passed | Circular import check ran (status `ran`): 0 cycles, in the evidence folder |
 | GAP-Supabase | Unverified | No stack reference; checked against the general checklists only |
 
-Rows cover every gated checklist item, every non-advisory item of each loaded stack reference, one `GAP-<technology>` row per detected technology with no stack reference, one `COV-<area>` row per area or file left unexamined (section 10), and a `CHALLENGE-<area>` row for any area the challenge did not cover (section 12). Outcomes: Passed (a Verified Safeguard, or nothing found by a check the row describes), Not Applicable, Confirmed by developer (with what they said and the date), Accepted (with the reason), Finding (with task or section reference), Unverified (with the blocker), Decision Needed. The verdict counts come from this table.
+Rows cover every gated checklist item, every non-advisory item of each loaded stack reference, one `GAP-<technology>` row per detected technology with no stack reference, one `COV-<area>` row per area or file left unexamined (section 10), and a `CHALLENGE-<area>` row for any area the challenge did not cover (section 12). Outcomes: Passed (a Verified Safeguard or nothing found by a check the row describes), Not Applicable, Confirmed by developer (with what they said and the date), Accepted (with the reason), Finding (with task or section reference), Probable (with the next step that would settle it), Unverified (with the blocker), Decision Needed. The verdict counts come from this table.
 
 A Passed row is a claim someone may try to break, so it carries its proof of pass: what was examined (the files or areas read, or the tool and its result) and the fact that makes the item pass. A row that says only "checked" or "nothing found" is not a pass; record it as Unverified with the reason.
 
@@ -230,9 +233,9 @@ Only when the developer has handed in findings from outside (`/codedetective rev
 
 | EXT | Claim, in one line | Checklist ID | Result | Missed by the audit | Task or reason |
 |---|---|---|---|---|---|
-| EXT-01 | Password reset tokens never expire | SEC-05 | Confirmed | Yes: Pass 1, SEC-05 | P1-07 |
+| EXT-01 | Password reset tokens never expire | SEC-01 | Confirmed | Yes: Pass 1, SEC-01 | P1-07 |
 | EXT-02 | No rate limit on login | SEC-16 | Already in the report | No | P1-02 |
-| EXT-03 | SQL injection in search | SEC-08 | Refuted | No | The query is parameterized: server/routes/search.js, line 41 |
+| EXT-03 | SQL injection in search | SEC-07 | Refuted | No | The query is parameterized: server/routes/search.js, line 41 |
 
 A claim is checked against the code before it gets a result; the outside reviewer's word is never the evidence.
 
@@ -249,7 +252,7 @@ Then every claim:
 | CH | Claim, in one line | Checklist ID | Result | Task or reason |
 |---|---|---|---|---|
 | CH-01 | The export route returns any user's invoices by ID | SEC-03 | Confirmed, missed by the first look (Pass 1, SEC-03) | P0-02 |
-| CH-02 | Search query built by string concatenation | SEC-08 | Refuted | The query is parameterized: server/routes/search.js, line 41 |
+| CH-02 | Search query built by string concatenation | SEC-07 | Refuted | The query is parameterized: server/routes/search.js, line 41 |
 
 "Reviewer" is "separate" for a fresh subagent that never saw the audit, or "same agent" for a self-challenge. A claim is verified against the code before it gets a result; the challenger's word is never the evidence.
 ```
