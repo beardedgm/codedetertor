@@ -16,7 +16,7 @@ Record the current stage in the report's Progress section (`Stage:`) and update 
 
 | Stage | What happens in it | It ends when | Then |
 |---|---|---|---|
-| 1. Audit | Phase 0, Passes 1 to 4 and the challenge (`references/challenge.md`), straight through. Read-only. | The challenge is written | Stage 2, without asking |
+| 1. Audit | Phase 0, Passes 1 to 4, the challenge (`references/challenge.md`), and `history.mjs record-run` (`references/history.md`), straight through. Read-only. | The challenge and history comparison are written | Stage 2, without asking |
 | 2. Report | The full report is shown in the conversation. | It has been shown | Stop: the closing question |
 | 3. Decisions | The decision step: the developer corrects, answers and accepts. Optional, and they may come back to it at any stop. | They have answered what they want to | Stop: the next-step question |
 | 4. Plan P0 and P1 | One plan covering every open P0 and P1 task, P0 first, written as a list of pull requests. Read-only. | The plan is approved | Stop: the next-step question |
@@ -29,7 +29,7 @@ Record the current stage in the report's Progress section (`Stage:`) and update 
 Rules that hold across stages:
 - **P0 and P1 come first, P2 comes last.** P0 and P1 fixes change the code that P2 plans would be written against, so P2 waits. If the developer asks to plan or fix a P2 task while a P0 or P1 task is open, say this in one line and ask whether to go ahead anyway; it is their choice.
 - **A stage with nothing in it is skipped.** With no open P0 or P1 task, planning goes straight to stage 6. With no open task at all, the run goes from the report to stage 9 (or stops at "Standard met, with gaps", listing the gaps).
-- **A task that appears later goes to the stage its priority belongs to.** An outside review, a reversed decision or a finding that came back can add a task at any time. If a P0 or P1 task appears during stages 6 to 8, finish the task in hand, say what appeared, and return to stage 4.
+- **A task that appears later goes to the stage its priority belongs to.** An outside review, a reversed decision or a finding that came back (`came-back`) can add a task at any time. Findings flagged as `circle` by `history.mjs` are routed to stage 3 (Decisions Needed) rather than auto-queued, and settled circles (`set-status --status settled`) stay closed unless the code changes. If a P0 or P1 task appears during stages 6 to 8, finish the task in hand, say what appeared, and return to stage 4.
 - **Nothing is left behind.** A proven fix is delivered before anything else happens (`references/delivery.md`). Never start the next unit, and never offer the next stage, over a proven fix that is still sitting undelivered in the working tree.
 - **Stops inside stages 5 and 8 depend on what was asked.** `fix all` runs through every approved unit and stops only at a problem, at something that needs the developer, or when the stage is done. `fix <TASK-ID>` and `fix batch <name>` deliver their one unit and then stop. With `Delivery: ask`, every unit stops for review, as `references/delivery.md` describes.
 - **Reading never needs permission; changing always does.** Stages 1, 2, 4, 6 and 7 change no code. No code changes without an approved plan, and only `fix` builds one.

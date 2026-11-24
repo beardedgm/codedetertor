@@ -368,6 +368,84 @@ check('history: the same run cannot be recorded twice, and nothing outside .audi
   assert(git(repo, 'status', '--porcelain').out.trim() === '', 'the working tree shows changes outside .audit');
 });
 
+check('history: repeated TASK-ID across runs does not overwrite earlier fixes', () => {
+  const repo = historyRepo('h-repeat-task');
+  const B = { id: 'QUAL-02', file: 'src/b.js', symbol: 'save' };
+  run(repo, 'r1', [DUP]);
+  hist(repo, ['record-fix', '--run', 'r1', '--task', 'P2-01', '--id', 'QUAL-02', '--at', 'src/a.js#load']);
+  run(repo, 'r2', [B]);
+  hist(repo, ['record-fix', '--run', 'r2', '--task', 'P2-01', '--id', 'QUAL-02', '--at', 'src/b.js#save']);
+  assert(hist(repo, ['lookup', '--at', 'src/a.js#load']).json.fixes.length === 1, 'r1 fix was overwritten');
+  assert(hist(repo, ['lookup', '--at', 'src/b.js#save']).json.fixes.length === 1, 'r2 fix missing');
+  const out = run(repo, 'r3', [DUP]);
+  const row = out.findings.find((f) => f.id === 'QUAL-02');
+  assert(row.label === 'came-back' && row.fixedBy.run === 'r1' && row.fixedBy.task === 'P2-01', `got ${JSON.stringify(row)}`);
+});
+
+check('history: repeated TASK-ID across runs still detects true A->B->A chains and avoids false ones', () => {
+  const repo = historyRepo('h-repeat-chain');
+  const OTHER = { id: 'QUAL-03', file: 'src/other.js', symbol: 'unused' };
+  run(repo, 'r1', [DUP]);
+  hist(repo, ['record-fix', '--run', 'r1', '--task', 'P2-01', '--id', 'QUAL-02', '--at', 'src/a.js#load', '--created', 'src/shared.js#loadShared']);
+  run(repo, 'r2', [{ id: 'QUAL-13', file: 'src/shared.js', symbol: 'loadShared' }, OTHER]);
+  hist(repo, ['record-fix', '--run', 'r2', '--task', 'P2-01', '--id', 'QUAL-03', '--at', 'src/other.js#unused', '--created', 'src/unrelated.js#helper']);
+  hist(repo, ['record-fix', '--run', 'r2', '--task', 'P2-02', '--id', 'QUAL-13', '--at', 'src/shared.js#loadShared', '--changed', 'src/a.js#load']);
+  const out = run(repo, 'r3', [DUP, { id: 'QUAL-13', file: 'src/unrelated.js', symbol: 'helper' }]);
+  const dupRow = out.findings.find((f) => f.id === 'QUAL-02');
+  const unrelatedRow = out.findings.find((f) => f.at === 'src/unrelated.js#helper');
+  assert(dupRow.label === 'circle' && dupRow.chain.length === 2 && dupRow.chain[0].run === 'r1', `chain failed: ${JSON.stringify(dupRow)}`);
+  assert(unrelatedRow.label === 'follows-fix' && unrelatedRow.fix.run === 'r2', `follows-fix failed: ${JSON.stringify(unrelatedRow)}`);
+  // Also verify an unrelated fix in r2 reusing P2-01 that touches src/other.js does not trigger a false chain on r1/P2-01.
+  const repo2 = historyRepo('h-no-cross-chain');
+  run(repo2, 'r1', [DUP]);
+  hist(repo2, ['record-fix', '--run', 'r1', '--task', 'P2-01', '--id', 'QUAL-02', '--at', 'src/a.js#load']);
+  run(repo2, 'r2', [OTHER]);
+  hist(repo2, ['record-fix', '--run', 'r2', '--task', 'P2-01', '--id', 'QUAL-03', '--at', 'src/other.js#unused', '--created', 'src/extra.js#x']);
+  run(repo2, 'r3', [{ id: 'QUAL-13', file: 'src/extra.js', symbol: 'x' }]);
+  hist(repo2, ['record-fix', '--run', 'r3', '--task', 'P2-01', '--id', 'QUAL-13', '--at', 'src/extra.js#x', '--changed', 'src/a.js#load']);
+  const out2 = run(repo2, 'r4', [DUP]);
+  assert(labelOf(out2, 'QUAL-02') === 'came-back', `false chain detected: ${JSON.stringify(out2.findings)}`);
+});
+
+check('history: git recovery keeps fixes with repeated TASK-IDs across runs and legacy commits', () => {
+  const repo = historyRepo('h-recover-repeat');
+  run(repo, 'r1', [DUP]);
+  const label1 = hist(repo, ['label', '--run', 'r1', '--task', 'P2-01', '--id', 'QUAL-02', '--at', 'src/a.js#load']).out.trim();
+  write(repo, 'src/a.js', 'export const a = 2;\n');
+  git(repo, 'add', '-A');
+  git(repo, 'commit', '-q', '-m', `Fix a in r1\n\n${label1}`);
+
+  const label2 = hist(repo, ['label', '--run', 'r2', '--task', 'P2-01', '--id', 'QUAL-02', '--at', 'src/b.js#save']).out.trim();
+  write(repo, 'src/b.js', 'export const b = 2;\n');
+  git(repo, 'add', '-A');
+  git(repo, 'commit', '-q', '-m', `Fix b in r2\n\n${label2}`);
+
+  const legacyLabel = hist(repo, ['label', '--task', 'P2-01', '--id', 'QUAL-02', '--at', 'src/a.js#load']).out.trim();
+  write(repo, 'src/a.js', 'export const a = 3;\n');
+  git(repo, 'add', '-A');
+  git(repo, 'commit', '-q', '-m', `Fix a again legacy\n\n${legacyLabel}`);
+  const latestCommit = git(repo, 'rev-parse', '--short=12', 'HEAD').out.trim();
+
+  fs.rmSync(path.join(repo, '.audit'), { recursive: true, force: true });
+  const lookA = hist(repo, ['lookup', '--at', 'src/a.js#load']).json;
+  const lookB = hist(repo, ['lookup', '--at', 'src/b.js#save']).json;
+  assert(lookA.fixes.length === 2, `expected 2 fixes for src/a.js#load, got ${lookA.fixes.length}`);
+  assert(lookB.fixes.length === 1 && lookB.fixes[0].run === 'r2', `expected r2 fix for src/b.js#save, got ${JSON.stringify(lookB)}`);
+  const out = run(repo, 'r3', [DUP]);
+  assert(out.findings[0].label === 'came-back' && out.findings[0].fixedBy.commit === latestCommit, `expected latest commit ${latestCommit}, got ${JSON.stringify(out.findings[0])}`);
+});
+
+check('history: git recovery parses file paths containing spaces', () => {
+  const repo = historyRepo('h-recover-spaces');
+  const label = hist(repo, ['label', '--run', 'r1', '--task', 'P2-01', '--id', 'QUAL-02', '--at', 'src/my utils/load data.js#load']).out.trim();
+  write(repo, 'src/my utils/load data.js', 'export const load = () => 1;\n');
+  git(repo, 'add', '-A');
+  git(repo, 'commit', '-q', '-m', `Fix spaced path\n\n${label}`);
+  fs.rmSync(path.join(repo, '.audit'), { recursive: true, force: true });
+  const out = run(repo, 'r2', [{ id: 'QUAL-02', file: 'src/my utils/load data.js', symbol: 'load' }]);
+  assert(labelOf(out, 'QUAL-02') === 'came-back', `label was ${labelOf(out, 'QUAL-02')}`);
+});
+
 fs.rmSync(tmp, { recursive: true, force: true });
 const failed = results.filter(([, status]) => status.startsWith('FAILED'));
 for (const [name, status] of results) process.stdout.write(`${status === 'ok' ? 'ok     ' : status === 'skipped' ? 'skipped' : 'FAILED '} ${name}${status.startsWith('FAILED') ? `\n        ${status.slice(8)}` : ''}\n`);

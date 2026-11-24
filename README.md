@@ -2,7 +2,7 @@
 
 A Claude Code skill that holds a codebase to a fixed, published standard: it audits the whole repository, proves each problem before raising it, fixes what fails one small approved change at a time, and tells you plainly when the standard is met.
 
-Think of it as a building inspector who also does the repairs. It checks security, data integrity, performance, architecture, tests and code quality against named standards (OWASP, CWE and each framework's own documentation), never against an AI's taste. It touches nothing while it inspects. Fixing starts only when you ask, every fix is planned and approved by you first, and it stops for your review after each one. When nothing is left that fails the standard, it says so and stops instead of inventing work.
+Think of it as a building inspector who also does the repairs. It checks security, data integrity, performance, architecture, tests and code quality against named standards (OWASP, CWE and each framework's own documentation), never against an AI's taste. It touches nothing while it inspects. Fixing starts only when you ask, every fix is planned and approved by you first, and each proven fix leaves as its own pull request (or stops for your review after each one if you prefer). When nothing is left that fails the standard, it says so and stops instead of inventing work.
 
 **Best for:** JavaScript and TypeScript web apps. It goes deepest on Node, Express, React, Vite, MongoDB with Mongoose, Cloudflare R2, Render and Playwright. Other stacks get the full general checklists, and the report says where depth is missing.
 
@@ -76,7 +76,7 @@ To update a cloned install, run `git pull` inside that folder.
 
 ## What it needs
 
-**Required:** Claude Code, Node.js (for the two bundled scripts), and git (the project should be a git repository).
+**Required:** Claude Code, Node.js (for the bundled scripts), and git (the project should be a git repository). Optional: the GitHub CLI (`gh`) for automatic pull requests.
 
 **Analyzers.** The audit proves its findings with tools installed in your project or on your computer. It never installs anything itself. Each tool it cannot find leaves some checks unproven:
 
@@ -167,7 +167,7 @@ Every audit is a separate run in its own dated folder under `.audit/runs/`, so a
 
 - **Resuming.** Running `/codedetective` again continues an audit that hasn't finished, such as one that was interrupted or paused for a question. If that audit is more than 3 days old or the code has changed since it started, it asks whether to resume or start over.
 - **Starting fresh.** Once an audit is complete and nothing is left to fix, the next `/codedetective` starts a new one. If fixes are still open, it asks first instead of replacing your queue. `/codedetective new` starts a new one any time.
-- **Comparing.** A new audit compares itself with the previous one by checklist ID: what was fixed, what is still open, what is new, and anything that came back after being fixed. Regressions are flagged and ranked first within their priority. Nothing is copied over: every finding is re-verified against today's code. The comparison is written at the end, after the new audit has examined everything on its own, so an earlier audit never decides where a new one looks.
+- **Comparing.** After the audit and challenge finish, `scripts/history.mjs` compares findings against `.audit/history.json` across runs by checklist ID, symbol and renames (and recovers fixes from `Codedetective-Fix:` commit trailers if the file is lost): what was fixed, what is still open, what is new, what followed an earlier fix, anything that came back after being fixed, and any fixes going in circles (which stop for your decision instead of looping). Regressions are flagged and ranked first within their priority. Nothing is copied over: every finding is re-verified against today's code, and an earlier run never decides where a new one looks.
 - **Fixing.** Once the audit is finished, `plan` and `fix` work on its queue, even across several days. `status` works at any time.
 - **Older files.** If `.audit/` holds files from before runs existed, they are moved into a `legacy` run folder automatically before anything else happens.
 - **Older report formats.** If a run's report was started by an earlier version of the skill, it's upgraded once, in place, when you next resume it: missing sections like the verdict and the coverage table are added from what the report already recorded, without redoing finished passes. Anything the old report never recorded is marked unverified rather than guessed, and it offers to re-run just that pass.
@@ -375,6 +375,7 @@ If you have switched delivery to "ask", it offers to commit, open a pull request
 | `.audit/runs/<date>/scratch/` | Throwaway measurement scripts. |
 | `.audit/runs/<date>/external/` | Outside reviews you handed in, saved with secrets removed. |
 | `.audit/current-run` | Which run is current. |
+| `.audit/history.json` | Findings and fixes across runs; spots comebacks, follow-on findings, and circles. |
 | `.audit/false-positives.md` | Findings refuted for recurring reasons. Maintained by the skill. |
 | `.audit/accepted.md` | Items you accepted, with your reasons. Honoured by later audits. |
 | `.audit/context.md` | Optional. Your project context, written by you. |
@@ -414,6 +415,7 @@ references/
   flow.md                       The stages, where each one stops, and what is asked there
   challenge.md                  The second, independent look that ends every audit
   delivery.md                   How every fix leaves as a pull request, and what happens when a check fails
+  history.md                    How history.mjs tracks findings, comebacks, circles, and fixes across runs
   external-review.md            How findings from outside the audit are checked and added
   report-template.md            Report structure, task format, context template
 scripts/

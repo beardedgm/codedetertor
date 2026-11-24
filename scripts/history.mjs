@@ -11,12 +11,12 @@
 //
 // Usage (from the repository root):
 //   node history.mjs record-run --run <run-id> --findings <file.json> [--commit <sha>]
-//   node history.mjs record-fix --task <TASK-ID> --id <CHECK-ID> --at <file#symbol> [--commit <sha>]
+//   node history.mjs record-fix [--run <run-id>] --task <TASK-ID> --id <CHECK-ID> --at <file#symbol> [--commit <sha>]
 //                               [--created <file#symbol>]... [--changed <file#symbol>]...
 //                               [--renamed <old#sym=new#sym>]...
 //   node history.mjs set-status --id <CHECK-ID> --at <file#symbol> --status <open|accepted|settled> [--note <text>]
 //   node history.mjs lookup --at <file#symbol>
-//   node history.mjs label --task <TASK-ID> --id <CHECK-ID> --at <file#symbol>
+//   node history.mjs label [--run <run-id>] --task <TASK-ID> --id <CHECK-ID> --at <file#symbol>
 //
 // <file.json> is an array of { "id": "QUAL-02", "file": "src/a.js", "symbol": "helper" }, one per finding
 // this run verified on its own. Output is JSON on stdout. It reads git and writes only .audit/history.json.
@@ -101,7 +101,7 @@ function moveEntry(entry, to) {
   if (to.symbol) entry.symbol = to.symbol; else delete entry.symbol;
 }
 
-// Fix commits carry "Codedetective-Fix: <TASK> <CHECK-ID> <file#symbol>". Add any the file does not know.
+// Fix commits carry "Codedetective-Fix: [<run-id>/]<TASK> <CHECK-ID> <file#symbol>". Add any the file does not know.
 function recoverFromGit(data) {
   const log = git(['log', '--format=%H%x00%B%x01']);
   if (!log) return;
@@ -110,13 +110,24 @@ function recoverFromGit(data) {
     if (!body) continue;
     for (const line of body.split('\n')) {
       if (!line.startsWith(LABEL)) continue;
-      const [task, id, where] = line.slice(LABEL.length).trim().split(/\s+/);
+      const m = line.slice(LABEL.length).trim().match(/^(\S+)\s+(\S+)\s+(.+)$/);
+      if (!m) continue;
+      const [, rawTask, id, rawWhere] = m;
+      const slash = rawTask.indexOf('/');
+      const run = slash === -1 ? undefined : rawTask.slice(0, slash) || undefined;
+      const task = slash === -1 ? rawTask : rawTask.slice(slash + 1);
+      const where = rawWhere.trim();
       if (!task || !id || !where) continue;
-      if (data.fixes.some((f) => f.task === task && f.id === id)) continue;
+      const shortHash = hash.slice(0, 12);
       const loc = parseLoc(where);
+      const already = data.fixes.some((f) =>
+        (run && f.run === run && f.task === task && f.id === id)
+        || (f.commit === shortHash && f.task === task && f.id === id && sameLoc(f.at, loc))
+      );
+      if (already) continue;
       const entry = findEntry(data, id, loc) || addEntry(data, id, loc);
       if (entry.status === 'open') entry.status = 'fixed';
-      data.fixes.push({ task, id, at: loc, commit: hash.slice(0, 12), created: [], changed: [loc], renamed: [], recovered: true });
+      data.fixes.push({ ...(run ? { run } : {}), task, id, at: loc, commit: shortHash, created: [], changed: [loc], renamed: [], recovered: true });
     }
   }
 }
@@ -171,8 +182,9 @@ function recordRun() {
       const cause = [...data.fixes].reverse().find((f) => f.created.some((p) => covers(p, loc, true)) || f.changed.some((p) => covers(p, loc, false)));
       if (cause) {
         entry.followsFix = cause.task;
+        if (cause.run) entry.followsFixRun = cause.run; else delete entry.followsFixRun;
         row.label = 'follows-fix';
-        row.fix = { task: cause.task, id: cause.id, commit: cause.commit };
+        row.fix = { ...(cause.run ? { run: cause.run } : {}), task: cause.task, id: cause.id, commit: cause.commit };
       } else {
         row.label = previous ? 'new' : 'first-run';
       }
@@ -180,18 +192,22 @@ function recordRun() {
       const fix = [...data.fixes].reverse().find((f) => f.id === entry.id && places(entry).some((p) => sameLoc(p, f.at)));
       entry.comebacks += 1;
       entry.status = 'open';
-      row.fixedBy = fix ? { task: fix.task, commit: fix.commit } : undefined;
+      row.fixedBy = fix ? { ...(fix.run ? { run: fix.run } : {}), task: fix.task, commit: fix.commit } : undefined;
       row.changedSince = fix ? commitsSince(fix.commit, entry.file) : [];
       // A circle: the second comeback, or a fix for a finding that itself followed this one's fix.
       const chain = fix && data.fixes.find((f) => {
         const other = data.entries.find((e) => e.id === f.id && places(e).some((p) => sameLoc(p, f.at)));
         return other && other !== entry && other.followsFix === fix.task
+          && (other.followsFixRun || null) === (fix.run || null)
           && [...f.created, ...f.changed].some((p) => places(entry).some((q) => covers(p, q, false) || sameLoc(p, q)));
       });
       if (entry.comebacks >= 2 || chain) {
         row.label = 'circle';
         row.why = chain ? `fixing ${chain.id} (${chain.task}) brought it back, and ${chain.id} followed this finding's own fix` : `came back ${entry.comebacks} times`;
-        if (chain) row.chain = [{ task: fix.task, id: entry.id }, { task: chain.task, id: chain.id }];
+        if (chain) row.chain = [
+          { ...(fix.run ? { run: fix.run } : {}), task: fix.task, id: entry.id },
+          { ...(chain.run ? { run: chain.run } : {}), task: chain.task, id: chain.id },
+        ];
       } else {
         row.label = 'came-back';
       }
@@ -232,6 +248,7 @@ function recordRun() {
 
 function recordFix() {
   const data = load();
+  const run = one('run', false) || (data.runs.length ? data.runs[data.runs.length - 1].run : undefined);
   const task = one('task');
   const id = one('id');
   const at = parseLoc(one('at'));
@@ -246,11 +263,15 @@ function recordFix() {
   }
   entry.status = 'fixed';
   const commit = one('commit', false) || (git(['rev-parse', '--short=12', 'HEAD']) || '').trim() || undefined;
-  const fix = { task, id, at: { file: entry.file, ...(entry.symbol ? { symbol: entry.symbol } : {}) }, commit, created: many('created').map(parseLoc), changed: [at, ...many('changed').map(parseLoc)], renamed };
-  data.fixes = data.fixes.filter((f) => !(f.task === task && f.id === id));
+  const fix = { ...(run ? { run } : {}), task, id, at: { file: entry.file, ...(entry.symbol ? { symbol: entry.symbol } : {}) }, commit, created: many('created').map(parseLoc), changed: [at, ...many('changed').map(parseLoc)], renamed };
+  data.fixes = data.fixes.filter((f) => !(
+    run
+      ? (f.run === run && f.task === task && f.id === id)
+      : (!f.run && f.task === task && f.id === id && f.commit === commit && sameLoc(f.at, fix.at))
+  ));
   data.fixes.push(fix);
   save(data);
-  process.stdout.write(`${JSON.stringify({ recorded: fix, label: `${LABEL} ${task} ${id} ${showLoc(fix.at)}` }, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify({ recorded: fix, label: `${LABEL} ${run ? `${run}/${task}` : task} ${id} ${showLoc(fix.at)}` }, null, 2)}\n`);
 }
 
 function setStatus() {
@@ -273,9 +294,9 @@ function lookup() {
   const data = load();
   const at = parseLoc(one('at'));
   const hit = (p, created) => covers(p, at, created) || (!at.symbol && p.file === at.file);
-  const findings = data.entries.filter((e) => places(e).some((p) => hit(p, false))).map((e) => ({ id: e.id, at: showLoc({ file: e.file, symbol: e.symbol }), status: e.status, comebacks: e.comebacks, followsFix: e.followsFix, note: e.note }));
+  const findings = data.entries.filter((e) => places(e).some((p) => hit(p, false))).map((e) => ({ id: e.id, at: showLoc({ file: e.file, symbol: e.symbol }), status: e.status, comebacks: e.comebacks, followsFix: e.followsFix, ...(e.followsFixRun ? { followsFixRun: e.followsFixRun } : {}), note: e.note }));
   const fixes = data.fixes.filter((f) => f.created.some((p) => hit(p, true)) || f.changed.some((p) => hit(p, false)) || f.renamed.some((r) => hit(r.to, false) || hit(r.from, false)))
-    .map((f) => ({ task: f.task, id: f.id, commit: f.commit, created: f.created.map(showLoc), changed: f.changed.map(showLoc), renamed: f.renamed.map((r) => `${showLoc(r.from)} -> ${showLoc(r.to)}`) }));
+    .map((f) => ({ ...(f.run ? { run: f.run } : {}), task: f.task, id: f.id, commit: f.commit, created: f.created.map(showLoc), changed: f.changed.map(showLoc), renamed: f.renamed.map((r) => `${showLoc(r.from)} -> ${showLoc(r.to)}`) }));
   process.stdout.write(`${JSON.stringify({ at: showLoc(at), findings, fixes }, null, 2)}\n`);
 }
 
@@ -283,5 +304,9 @@ if (command === 'record-run') recordRun();
 else if (command === 'record-fix') recordFix();
 else if (command === 'set-status') setStatus();
 else if (command === 'lookup') lookup();
-else if (command === 'label') process.stdout.write(`${LABEL} ${one('task')} ${one('id')} ${showLoc(parseLoc(one('at')))}\n`);
+else if (command === 'label') {
+  const run = one('run', false);
+  const task = one('task');
+  process.stdout.write(`${LABEL} ${run ? `${run}/${task}` : task} ${one('id')} ${showLoc(parseLoc(one('at')))}\n`);
+}
 else fail('use one of: record-run, record-fix, set-status, lookup, label');
