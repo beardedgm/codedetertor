@@ -19,5 +19,5 @@ Each item has an ID. When Phase 0 loads this file, its items are gated like chec
 
 - JSDOC-01: **Config.** `tsconfig.json` or `jsconfig.json` sets `allowJs`, `checkJs`, `strict` and `noEmit`. `checkJs` is equivalent to `// @ts-check` on every file.
 - JSDOC-02: **Suppressions.** Count and locate `@ts-nocheck`, `@ts-ignore` and `@ts-expect-error`. Each needs a justification; `@ts-nocheck` on a whole file is a finding.
-- JSDOC-03: **Silent `any`.** In JavaScript files, variables initialized with `null`, `undefined` or `[]` are typed `any` or `any[]` even under strict null checks. These need explicit JSDoc types to get real checking.
+- JSDOC-03: **Silent `any`.** Under `strict: true` (`noImplicitAny`), TypeScript control-flow narrows initializers such as `let x = null` or `const out = []` and emits `TS7034`/`TS7005` when a closure leaves them untypeable, so do not flag them when `tsc` passes with `strict` enabled. Silent `any` is a finding only when `noImplicitAny` is off, when an explicit `@type {any}` or `@type {Object}` widens a boundary, or when `tsc` reports an implicit-any error.
 - JSDOC-04: **Shared shapes.** Request and response shapes are defined once (a `@typedef` or a shared schema) and imported by both client and server.

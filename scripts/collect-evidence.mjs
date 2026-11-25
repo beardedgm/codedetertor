@@ -606,20 +606,26 @@ function record(tool, status, extra = {}) {
 
 // 8. Suppressions, skips, focus markers, empty catches (built in, no tool needed)
 (() => {
+  const isTestFile = (rel) => {
+    const p = rel.replace(/\\/g, '/');
+    return /(^|\/)(__tests__|e2e|tests?|spec)\//i.test(p)
+      || /[._-](test|spec)\.[cm]?[jt]sx?$/i.test(p)
+      || /(^|\/)test_[^/]*\.py$|_test\.(py|go)$/i.test(p);
+  };
   const patterns = [
     ['ts-ignore', /@ts-ignore\b/],
     ['ts-nocheck', /@ts-nocheck\b/],
     ['ts-expect-error', /@ts-expect-error\b/],
     ['eslint-disable', /eslint-disable(?:-next-line|-line)?\b/],
-    ['test-skip', /\b(?:it|test|describe|context|suite)(?:\.\w+)*\.(?:skip|skipIf|runIf|fixme|todo)\s*\(|\b(?:xit|xdescribe|xtest)\s*\(/],
-    ['test-only', /\b(?:it|test|describe|context|suite)(?:\.\w+)*\.only\s*\(|\b(?:fit|fdescribe)\s*\(/],
+    ['test-skip', /\b(?:it|test|describe|context|suite)(?:\.\w+)*\.(?:skip|skipIf|runIf|fixme|todo)\s*\(|\b(?:xit|xdescribe|xtest)\s*\(/, true],
+    ['test-only', /\b(?:it|test|describe|context|suite)(?:\.\w+)*\.only\s*\(|\b(?:fit|fdescribe)\s*\(/, true],
     ['empty-catch', /catch\s*(?:\([^)]*\))?\s*\{\s*\}/],
     ['tls-disabled', /rejectUnauthorized\s*:\s*false|NODE_TLS_REJECT_UNAUTHORIZED|verify\s*=\s*False|InsecureSkipVerify\s*:\s*true/],
     ['py-noqa', /#\s*noqa\b/],
     ['py-type-ignore', /#\s*type:\s*ignore\b/],
-    ['py-test-skip', /@pytest\.mark\.(?:skip|skipif|xfail)\b|\bpytest\.skip\s*\(|@unittest\.skip/],
+    ['py-test-skip', /@pytest\.mark\.(?:skip|skipif|xfail)\b|\bpytest\.skip\s*\(|@unittest\.skip/, true],
     ['go-nolint', /\/\/\s*nolint\b/],
-    ['go-test-skip', /\bt\.Skip(?:Now|f)?\s*\(/],
+    ['go-test-skip', /\bt\.Skip(?:Now|f)?\s*\(/, true],
     ['rust-ignore-or-allow', /#\[ignore\]|#!?\[allow\(/],
   ];
   const hits = [];
@@ -633,12 +639,15 @@ function record(tool, status, extra = {}) {
       if (!st.isFile() || st.size > 2 * 1024 * 1024) return;
       text = fs.readFileSync(full, 'utf8');
     } catch { return; }
+    const rel = path.relative(root, full);
+    const inTest = isTestFile(rel);
     scanned++;
     text.split(/\r?\n/).forEach((line, i) => {
-      for (const [kind, re] of patterns) {
+      for (const [kind, re, testOnly] of patterns) {
+        if (testOnly && !inTest) continue;
         if (re.test(line)) {
           counts[kind]++;
-          hits.push({ file: path.relative(root, full), line: i + 1, kind });
+          hits.push({ file: rel, line: i + 1, kind });
         }
       }
     });

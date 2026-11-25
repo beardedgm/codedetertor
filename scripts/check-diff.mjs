@@ -72,6 +72,7 @@ const isTestFile = (f) =>
   /(^|\/)(__tests__|e2e|tests?|spec)\//i.test(f) ||
   /[._-](test|spec)\.[cm]?[jt]sx?$/i.test(f) ||
   /(^|\/)test_[^/]*\.py$|_test\.(py|go)$/i.test(f);
+const isDocFile = (f) => /\.(?:md|mdx|txt|rst)$/i.test(f);
 const ignoredPath = (f) => f.startsWith('.audit/') || f.includes('node_modules/');
 
 // Config files that can switch checks off. Changing one fails unless the approved plan names it (--allow).
@@ -101,13 +102,13 @@ const SUPPRESSIONS = [
 const hasReason = (text) => (text || '').replace(/[^\w\s]/g, ' ').trim().split(/\s+/).filter((w) => w.length > 1).length >= 3;
 
 const FAIL_PATTERNS = [
-  ['adds a test skip', /\b(?:it|test|describe|context|suite)(?:\.\w+)*\.(?:skip|skipIf|runIf|fixme|todo)\s*\(|\b(?:xit|xdescribe|xtest)\s*\(/],
-  ['adds a test focus marker', /\b(?:it|test|describe|context|suite)(?:\.\w+)*\.only\s*\(|\b(?:fit|fdescribe)\s*\(/],
-  ['adds a Python test skip', /@pytest\.mark\.(?:skip|skipif|xfail)\b|\bpytest\.skip\s*\(|@unittest\.skip/],
-  ['adds a Go test skip', /\bt\.Skip(?:Now|f)?\s*\(/],
-  ['adds a Rust #[ignore]', /#\[ignore\]/],
-  ['disables TLS verification', /rejectUnauthorized\s*:\s*false|NODE_TLS_REJECT_UNAUTHORIZED|verify\s*=\s*False|InsecureSkipVerify\s*:\s*true/],
-  ['adds --no-verify or --passWithNoTests', /--no-verify\b|--passWithNoTests\b/],
+  ['adds a test skip', /\b(?:it|test|describe|context|suite)(?:\.\w+)*\.(?:skip|skipIf|runIf|fixme|todo)\s*\(|\b(?:xit|xdescribe|xtest)\s*\(/, true],
+  ['adds a test focus marker', /\b(?:it|test|describe|context|suite)(?:\.\w+)*\.only\s*\(|\b(?:fit|fdescribe)\s*\(/, true],
+  ['adds a Python test skip', /@pytest\.mark\.(?:skip|skipif|xfail)\b|\bpytest\.skip\s*\(|@unittest\.skip/, true],
+  ['adds a Go test skip', /\bt\.Skip(?:Now|f)?\s*\(/, true],
+  ['adds a Rust #[ignore]', /#\[ignore\]/, false],
+  ['disables TLS verification', /rejectUnauthorized\s*:\s*false|NODE_TLS_REJECT_UNAUTHORIZED|verify\s*=\s*False|InsecureSkipVerify\s*:\s*true/, false],
+  ['adds --no-verify or --passWithNoTests', /--no-verify\b|--passWithNoTests\b/, false],
 ];
 const REVIEW_PATTERNS = [['adds an empty catch block', /catch\s*(?:\([^)]*\))?\s*\{\s*\}|except[^:\n]*:\s*pass\s*$/]];
 const ASSERTION = /\bexpect\s*\(|\bassert(?:\.\w+|Equal|True|False|Raises)?\s*\(|^\s*assert\s|\.should\b|\bt\.(?:is|true|false|deepEqual|throws|Error|Fatal)\w*\s*\(/g;
@@ -117,6 +118,7 @@ const reviews = [];
 const assertionDelta = {};
 
 function scanAdded(file, lineNo, text) {
+  if (isDocFile(file)) return;
   for (const [label, re, mode, reasonOf] of SUPPRESSIONS) {
     const m = text.match(re);
     if (!m) continue;
@@ -125,7 +127,7 @@ function scanAdded(file, lineNo, text) {
     else if (hasReason(reason)) reviews.push(`${file}:${lineNo} adds ${label} with a written reason; confirm the reason holds`);
     else fails.push(`${file}:${lineNo} adds ${label} without a written reason`);
   }
-  for (const [label, re] of FAIL_PATTERNS) if (re.test(text)) fails.push(`${file}:${lineNo} ${label}`);
+  for (const [label, re, testOnly] of FAIL_PATTERNS) if ((!testOnly || isTestFile(file)) && re.test(text)) fails.push(`${file}:${lineNo} ${label}`);
   for (const [label, re] of REVIEW_PATTERNS) if (re.test(text)) reviews.push(`${file}:${lineNo} ${label}`);
   if (isTestFile(file)) assertionDelta[file] = (assertionDelta[file] || 0) + (text.match(ASSERTION) || []).length;
 }

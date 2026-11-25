@@ -32,6 +32,7 @@ The developer can drop this at `.audit/context.md` to sharpen the investigation.
 - Audit without these tools (the developer's choice, with the date): <tool names, or "none">
 - `.audit/` added to `.prettierignore` (asked once, only when the project uses Prettier): <yes | no | not needed>
 - Delivery: <automatic | ask> (automatic unless the developer said otherwise; told once, before the first fix, on <date>)
+- Branch prefix: <codedetective/ | repo convention such as claude/>
 - Delivery check (<date>): GitHub and `gh` <yes | no>; default branch <name>; merge method <merge | squash>; auto-merge allowed <yes | no>; required checks <names | none>; checks on pull requests <yes | none>; merging is done by <GitHub's auto-merge | the skill at check points | the developer>
 ```
 
@@ -56,15 +57,18 @@ Persistent exclusions, read at the start of every invocation. Add an entry whene
 
 Items the developer decided on: an answered Decision Needed, a finding they chose not to fix, or a blocked task they accepted. Read at the start of every invocation and carried across runs, but re-evaluated, never obeyed blindly (see "Earlier decisions are re-evaluated" in SKILL.md): each audit still checks the item, tests its premise against the code, compares the decisions with each other, and raises a Reconsider recommendation when there is evidence that reversing one would better meet the standard. The developer reviews them in the final report, not before the audit. Facts the developer confirmed (Confirmed by developer) are recorded in the run's report, not here, because they can change between audits and are asked again each time.
 
+To prevent formatting drift, overwrite `Last reconfirmed:` with only the single latest date and run instead of appending a growing line, always leave a blank line before every `##` heading, and move reversed or resolved entries to a `## Retired` section (or remove them once fixed) so they are never reconfirmed again.
+
 ```markdown
 # Accepted
+
 ## <Checklist ID>: <short name>
 - Where: <path :: symbol>
 - Decision: <what the developer chose, in their words>
 - Reason: <why>
 - Premise to check: <a condition the code can confirm, e.g. "signup requires an invite code", or "none">
 - Accepted: <date>, during <run-id> <task or section>
-- Last reconfirmed: <date, or "not yet">
+- Last reconfirmed: <date, run-id, or "not yet">
 ```
 
 ---
@@ -242,10 +246,10 @@ A claim is checked against the code before it gets a result; the outside reviewe
 ## 12. Challenge
 The second, independent look that ends every audit (`references/challenge.md`). First one row per area:
 
-| Area | Files read | Reviewer | Claims | Missed by the first look | Already in the report | Refuted | Not settled |
-|---|---|---|---|---|---|---|---|
-| server/routes | 14 of 14 | separate | 5 | 1 | 2 | 2 | 0 |
-| client/src | 96 of 96 | separate | 2 | 0 | 1 | 1 | 0 |
+| Area | Files read | Reviewer | Claims | Missed by the first look | Already in the report | Refuted | Advisory only | Not settled |
+|---|---|---|---|---|---|---|---|---|
+| server/routes | 14 of 14 | separate | 5 | 1 | 2 | 2 | 0 | 0 |
+| client/src | 96 of 96 | separate | 2 | 0 | 1 | 1 | 0 | 0 |
 
 Then every claim:
 
@@ -290,7 +294,7 @@ Priorities, by reachable consequence:
 - **P1 High Drag:** substantial usability degradation, measured performance bottleneck, confirmed race condition.
 - **P2 Hygiene & Architecture:** type strictness, contract parity, dead code, duplication, modernization, preventive maintenance.
 
-The block below is a format template only. Do not report it, and do not assume any file, function or bug it implies exists.
+The block below is a format template only. Do not report it, and do not assume any file, function or bug it implies exists. Always keep each task block in this multi-line format (never squash fields onto single pipe-delimited lines, so status tracking and automated parsing stay intact).
 
 ```task
 [TASK-ID]: <P0-01 | P1-01 | P2-01>
@@ -333,4 +337,4 @@ VERIFICATION RESULTS:
 
 ## Progress tracking
 
-When a plan is approved, set each covered task's `PROGRESS` to Planned and fill in `PLAN`. When a task is proven done (see "Proof of done" in SKILL.md), set its `PROGRESS` to Done, fill in `VERIFICATION RESULTS`, and update section 0. A task whose checks failed or could not be run is never Done. `Resolved: <reason>` is set only by the P2 re-check (see `references/flow.md`), for a task that is no longer present after earlier fixes, with the evidence; it is closed, like Done. When the user asks for a commit, pull request or merge, record it in `DELIVERY` for each task it covers. When a task is blocked (for example it cannot pass without weakening security or tests, or it needs a dependency the user has not approved), set `PROGRESS` to `Blocked: <reason>`, add it to Decisions Needed, and stop. The next eligible task is the first in queue order that is Queued or Planned and whose prerequisites are all Done; while a batch plan is active, take its next task in the batch's order. When the full report has been shown, record the date under "Full report presented", and keep the "Decisions" and "Stage" lines current at every stop.
+When a plan is approved, set each covered task's `PROGRESS` to Planned and fill in `PLAN`. When a task is proven done (see "Proof of done" in SKILL.md), immediately set its `PROGRESS` to Done (never leave merged tasks as `Planned` or `Built`), fill in `VERIFICATION RESULTS`, and update section 0. A task whose checks failed or could not be run is never Done. `Resolved: <reason>` is set only by the P2 re-check (see `references/flow.md`), for a task that is no longer present after earlier fixes, with the evidence; it is closed, like Done. When the user asks for a commit, pull request or merge, record it in `DELIVERY` for each task it covers. When a task is blocked (for example it cannot pass without weakening security or tests, or it needs a dependency the user has not approved), set `PROGRESS` to `Blocked: <reason>`, add it to Decisions Needed, and stop. The next eligible task is the first in queue order that is Queued or Planned and whose prerequisites are all Done; while a batch plan is active, take its next task in the batch's order. When the full report has been shown, record the date under "Full report presented", and keep the "Decisions" and "Stage" lines current at every stop.

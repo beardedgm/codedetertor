@@ -32,6 +32,7 @@ Before the first delivery, check these once, read-only, and record the results i
 | Whether the repository allows auto-merge | Needed for GitHub to merge by itself. |
 | Whether the default branch has required status checks | GitHub's auto-merge waits only for required checks. With none, it merges at once, even while checks are running or failing. |
 | Whether pull requests get any checks at all | With none there is no green to wait for. |
+| Branch prefix (`.audit/context.md` `Branch prefix:` and `CLAUDE.md` / repo rules) | Defaults to `codedetective/`. Use the repository's required prefix (such as `claude/`) when configured so branch rules pass. |
 
 Then say in one or two lines what this means for the project:
 - **Required checks and auto-merge allowed:** GitHub merges each pull request by itself when its checks pass.
@@ -48,7 +49,7 @@ Plans are written as lists of pull requests (formats in `references/report-templ
 
 ## Delivering a unit
 
-1. **Branch before the first edit.** Create `codedetective/<task-id-or-group>` from the up-to-date default branch. If the unit touches the same files as an earlier unit whose pull request has not merged, or depends on it, create the branch from that unit's branch instead, and record it as the base.
+1. **Branch before the first edit.** Create `<prefix><task-id-or-group>` from the up-to-date default branch, where `<prefix>` is `Branch prefix:` from `.audit/context.md` (respecting `CLAUDE.md` or repository rules; default `codedetective/`). If the unit touches the same files as an earlier unit whose pull request has not merged, or depends on it, create the branch from that unit's branch instead, and record it as the base.
 2. **Leave the developer's work alone.** Never carry their uncommitted changes into a commit, and never stash, reset or discard them. If their changes would block creating the branch, stop and ask.
 3. **Build and prove the unit** as the remediation steps say. Delivery starts only when the unit meets Proof of done.
 4. **Commit only this unit's files, one commit per task**, staged by path. The message says what changed and why, names the task and checklist item, and ends with the trailer from `node "${CLAUDE_SKILL_DIR}/scripts/history.mjs" label --run <run-id> --task <TASK-ID> --id <CHECK-ID> --at <file#symbol>` (`Codedetective-Fix: <run-id>/<TASK-ID> <CHECK-ID> <file#symbol>`). Never use `--no-verify`; a failing commit hook is a failure to fix or to report. Immediately after committing, record the fix with `node "${CLAUDE_SKILL_DIR}/scripts/history.mjs" record-fix` (`references/history.md`), passing `--run`, `--commit`, and any `--created`, `--changed`, or `--renamed` locations.

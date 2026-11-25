@@ -24,7 +24,7 @@ Record the current stage in the report's Progress section (`Stage:`) and update 
 | 6. P2 re-check | Every open P2 task is checked again against the code as it now stands, and the ones that remain are sorted into groups. Read-only. | The groups are written | Stage 7, without asking |
 | 7. Plan P2 | One plan listing every group as a pull request. Read-only. | The plan is approved | Stop: the next-step question |
 | 8. Fix P2 | The groups, one at a time, in the plan's order. Each group is delivered as one pull request the moment it is proven, and the next one starts without waiting for the merge. | No task is open | Stage 9, once every pull request is merged |
-| 9. Finished | Every finding is fixed, accepted or settled, and every pull request of the run is merged. | | Stop: say so, and offer a new audit |
+| 9. Finished | Every finding is fixed, accepted or settled, and every pull request of the run is merged. | | Prune throwaway `scratch/` files and intermediate `evidence/after-*` raw dumps (keep the report, `plans/`, `external/`, and baseline `evidence/summary.*`), then stop: say so, and offer a new audit |
 
 Rules that hold across stages:
 - **P0 and P1 come first, P2 comes last.** P0 and P1 fixes change the code that P2 plans would be written against, so P2 waits. If the developer asks to plan or fix a P2 task while a P0 or P1 task is open, say this in one line and ask whether to go ahead anyway; it is their choice.
@@ -101,7 +101,7 @@ This is a re-check of the listed tasks, not a new pass. Do not go looking for ne
 - A task that adds or upgrades a dependency, or that needs something from the developer (a key, a manual check), goes in a group of its own, so it cannot hold up the tasks beside it.
 - A large mechanical change, such as converting many tests to a new pattern, is its own group even when it shares an area with small fixes.
 - Order the groups by prerequisites first, then by how often the code is changed or read, hot areas first.
-- Name each group `p2-<kind>-<area>`, for example `p2-dead-code-server`. Its branch is `codedetective/<group name>`.
+- Name each group `p2-<kind>-<area>`, for example `p2-dead-code-server`. Its branch is `<prefix><group name>`, using `Branch prefix:` from `.audit/context.md` (default `codedetective/`).
 
 **The plan.** Write one plan that lists every group as a pull request (format in `references/report-template.md`): what the re-check found, how many pull requests there will be, the table of them (order, branch, title, tasks, what each depends on, what each needs from the developer), and for each group a batch plan with a short plan per task and its interactions. One approval covers all the groups. Save the overview as `plans/p2-groups.md` and each group as `plans/batch-<name>.md`. Each group is then built with `/codedetective fix batch <name>`, and the drift check still runs before every task, because earlier groups change the code later ones were planned against.
 
