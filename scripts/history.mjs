@@ -10,16 +10,17 @@
 // "Codedetective-Fix:" line, so fixes can be recovered from git when that file is lost.
 //
 // Usage (from the repository root):
-//   node history.mjs record-run --run <run-id> --findings <file.json> [--commit <sha>]
+//   node history.mjs record-run --run <run-id> --findings <file.json> [--advisories <file.json>] [--commit <sha>]
 //   node history.mjs record-fix [--run <run-id>] --task <TASK-ID> --id <CHECK-ID> --at <file#symbol> [--commit <sha>]
 //                               [--created <file#symbol>]... [--changed <file#symbol>]...
 //                               [--renamed <old#sym=new#sym>]...
 //   node history.mjs set-status --id <CHECK-ID> --at <file#symbol> --status <open|accepted|settled> [--note <text>]
+//   node history.mjs set-advisory --id <CHECK-ID> --at <file#symbol> --status <active|muted> [--note <text>]
 //   node history.mjs lookup --at <file#symbol>
 //   node history.mjs label [--run <run-id>] --task <TASK-ID> --id <CHECK-ID> --at <file#symbol>
 //
 // <file.json> is an array of { "id": "QUAL-02", "file": "src/a.js", "symbol": "helper" }, one per finding
-// this run verified on its own. Output is JSON on stdout. It reads git and writes only .audit/history.json.
+// (or advisory note) this run verified on its own. Output is JSON on stdout. It reads git and writes only .audit/history.json.
 
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -72,10 +73,11 @@ function covers(place, loc, created) {
 
 // ---- the file ----
 function load() {
-  let data = { version: 1, runs: [], entries: [], fixes: [] };
+  let data = { version: 1, runs: [], entries: [], fixes: [], advisories: [] };
   if (fs.existsSync(FILE)) {
     try { data = JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch { fail(`${FILE} is not valid JSON; move it aside and run again`); }
     if (data.version !== 1) fail(`${FILE} has version ${data.version}; this script reads version 1`);
+    if (!Array.isArray(data.advisories)) data.advisories = [];
   }
   recoverFromGit(data);
   return data;
@@ -85,13 +87,22 @@ function save(data) {
   fs.writeFileSync(FILE, `${JSON.stringify(data, null, 2)}\n`);
 }
 const places = (entry) => [{ file: entry.file, symbol: entry.symbol }, ...(entry.aliases || [])];
+const findItem = (list, id, loc) => list.find((e) => e.id === id && places(e).some((p) => sameLoc(p, loc)));
 function findEntry(data, id, loc) {
-  return data.entries.find((e) => e.id === id && places(e).some((p) => sameLoc(p, loc)));
+  return findItem(data.entries, id, loc);
 }
 function addEntry(data, id, loc) {
   const entry = { id, file: loc.file, ...(loc.symbol ? { symbol: loc.symbol } : {}), aliases: [], status: 'open', comebacks: 0, runs: [] };
   data.entries.push(entry);
   return entry;
+}
+function findAdvisory(data, id, loc) {
+  return findItem(data.advisories, id, loc);
+}
+function addAdvisory(data, id, loc) {
+  const adv = { id, file: loc.file, ...(loc.symbol ? { symbol: loc.symbol } : {}), aliases: [], status: 'active', runs: [] };
+  data.advisories.push(adv);
+  return adv;
 }
 function moveEntry(entry, to) {
   const from = { file: entry.file, ...(entry.symbol ? { symbol: entry.symbol } : {}) };
@@ -161,13 +172,19 @@ function recordRun() {
   let findings;
   try { findings = JSON.parse(fs.readFileSync(one('findings'), 'utf8')); } catch (e) { fail(`could not read the findings file: ${e.message}`); }
   if (!Array.isArray(findings)) fail('the findings file must be a JSON array');
+  const advFile = one('advisories', false);
+  let advisoriesInput = null;
+  if (advFile) {
+    try { advisoriesInput = JSON.parse(fs.readFileSync(advFile, 'utf8')); } catch (e) { fail(`could not read the advisories file: ${e.message}`); }
+    if (!Array.isArray(advisoriesInput)) fail('the advisories file must be a JSON array');
+  }
   const commit = one('commit', false) || (git(['rev-parse', '--short=12', 'HEAD']) || '').trim() || undefined;
   const previous = data.runs[data.runs.length - 1];
   const renames = renamesSince(previous && previous.commit);
   // Follow files git saw renamed, so a moved file still matches.
-  for (const entry of data.entries) {
-    const to = renames.get(entry.file);
-    if (to) moveEntry(entry, { file: to, symbol: entry.symbol });
+  for (const item of [...data.entries, ...data.advisories]) {
+    const to = renames.get(item.file);
+    if (to) moveEntry(item, { file: to, symbol: item.symbol });
   }
 
   const seen = new Set();
@@ -241,6 +258,43 @@ function recordRun() {
   }
   for (const entry of data.entries) if (seen.has(entry) && (entry.status === 'gone' || entry.status === 'not-compared')) entry.status = 'open';
 
+  let advisoryReport;
+  let advisoryCounts;
+  if (advisoriesInput) {
+    const seenAdv = new Set();
+    advisoryReport = [];
+    for (const raw of advisoriesInput) {
+      if (!raw || !raw.id || !raw.file) fail('every advisory needs an "id" and a "file"');
+      if (/[\/,\s]/.test(raw.id)) nonCanonicalIds.add(raw.id);
+      const loc = parseLoc(raw.symbol ? `${raw.file}#${raw.symbol}` : raw.file);
+      const adv = findAdvisory(data, raw.id, loc) || addAdvisory(data, raw.id, loc);
+      if (seenAdv.has(adv)) continue;
+      seenAdv.add(adv);
+      if (adv.aliases.length && !sameLoc(loc, { file: adv.file, symbol: adv.symbol })) moveEntry(adv, loc);
+      if (!adv.runs.includes(run)) adv.runs.push(run);
+      advisoryReport.push({
+        id: adv.id,
+        at: showLoc({ file: adv.file, symbol: adv.symbol }),
+        seenCount: adv.runs.length,
+        firstSeen: adv.runs[0],
+        lastSeen: adv.runs[adv.runs.length - 1],
+        status: adv.status || 'active',
+        ...(adv.note ? { note: adv.note } : {}),
+      });
+    }
+    advisoryReport.sort((a, b) => {
+      if ((a.status === 'muted') !== (b.status === 'muted')) return a.status === 'muted' ? 1 : -1;
+      if (b.seenCount !== a.seenCount) return b.seenCount - a.seenCount;
+      return a.id.localeCompare(b.id) || a.at.localeCompare(b.at);
+    });
+    advisoryCounts = {
+      total: advisoryReport.length,
+      recurring: advisoryReport.filter((a) => a.status !== 'muted' && a.seenCount >= 2).length,
+      firstTime: advisoryReport.filter((a) => a.status !== 'muted' && a.seenCount === 1).length,
+      muted: advisoryReport.filter((a) => a.status === 'muted').length,
+    };
+  }
+
   data.runs.push({ run, commit, findings: findings.length });
   save(data);
   const count = (label) => report.filter((r) => r.label === label).length;
@@ -248,7 +302,7 @@ function recordRun() {
   const warnings = nonCanonicalIds.size
     ? [`non-canonical checklist ID(s): ${[...nonCanonicalIds].join(', ')} — record one canonical ID per finding so cross-run matching works reliably`]
     : [];
-  process.stdout.write(`${JSON.stringify({ run, commit, comparedWith: previous ? previous.run : null, counts: Object.fromEntries(labels.map((l) => [l, count(l)])), findings: report, ...(warnings.length ? { warnings } : {}) }, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify({ run, commit, comparedWith: previous ? previous.run : null, counts: Object.fromEntries(labels.map((l) => [l, count(l)])), findings: report, ...(advisoryReport ? { advisoryCounts, advisories: advisoryReport } : {}), ...(warnings.length ? { warnings } : {}) }, null, 2)}\n`);
 }
 
 function recordFix() {
@@ -316,7 +370,22 @@ function setStatus() {
   process.stdout.write(`${JSON.stringify({ id, at: showLoc(at), status, note: entry.note }, null, 2)}\n`);
 }
 
-// What has already happened at this place: earlier findings and the fixes that created or changed it.
+function setAdvisory() {
+  const data = load();
+  const status = one('status');
+  if (!['active', 'muted'].includes(status)) fail('--status must be active or muted');
+  const id = one('id');
+  const at = parseLoc(one('at'));
+  const adv = findAdvisory(data, id, at);
+  if (!adv) fail(`no recorded advisory ${id} at ${showLoc(at)}`);
+  adv.status = status;
+  const note = one('note', false);
+  if (note) adv.note = note; else delete adv.note;
+  save(data);
+  process.stdout.write(`${JSON.stringify({ id, at: showLoc({ file: adv.file, symbol: adv.symbol }), status, seenCount: adv.runs.length, ...(adv.note ? { note: adv.note } : {}) }, null, 2)}\n`);
+}
+
+// What has already happened at this place: earlier findings, fixes and recurring advisories.
 function lookup() {
   const data = load();
   const at = parseLoc(one('at'));
@@ -324,16 +393,25 @@ function lookup() {
   const findings = data.entries.filter((e) => places(e).some((p) => hit(p, false))).map((e) => ({ id: e.id, at: showLoc({ file: e.file, symbol: e.symbol }), status: e.status, comebacks: e.comebacks, followsFix: e.followsFix, ...(e.followsFixRun ? { followsFixRun: e.followsFixRun } : {}), note: e.note }));
   const fixes = data.fixes.filter((f) => f.created.some((p) => hit(p, true)) || f.changed.some((p) => hit(p, false)) || f.renamed.some((r) => hit(r.to, false) || hit(r.from, false)))
     .map((f) => ({ ...(f.run ? { run: f.run } : {}), task: f.task, id: f.id, commit: f.commit, created: f.created.map(showLoc), changed: f.changed.map(showLoc), renamed: f.renamed.map((r) => `${showLoc(r.from)} -> ${showLoc(r.to)}`) }));
-  process.stdout.write(`${JSON.stringify({ at: showLoc(at), findings, fixes }, null, 2)}\n`);
+  const advisories = data.advisories.filter((a) => places(a).some((p) => hit(p, false))).map((a) => ({
+    id: a.id,
+    at: showLoc({ file: a.file, symbol: a.symbol }),
+    status: a.status || 'active',
+    seenCount: (a.runs || []).length,
+    ...(a.runs && a.runs.length ? { firstSeen: a.runs[0], lastSeen: a.runs[a.runs.length - 1] } : {}),
+    ...(a.note ? { note: a.note } : {}),
+  }));
+  process.stdout.write(`${JSON.stringify({ at: showLoc(at), findings, fixes, ...(advisories.length ? { advisories } : {}) }, null, 2)}\n`);
 }
 
 if (command === 'record-run') recordRun();
 else if (command === 'record-fix') recordFix();
 else if (command === 'set-status') setStatus();
+else if (command === 'set-advisory') setAdvisory();
 else if (command === 'lookup') lookup();
 else if (command === 'label') {
   const run = one('run', false);
   const task = one('task');
   process.stdout.write(`${LABEL} ${run ? `${run}/${task}` : task} ${one('id')} ${showLoc(parseLoc(one('at')))}\n`);
 }
-else fail('use one of: record-run, record-fix, set-status, lookup, label');
+else fail('use one of: record-run, record-fix, set-status, set-advisory, lookup, label');

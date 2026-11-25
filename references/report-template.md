@@ -183,7 +183,7 @@ Both tiers count against the verdict: the checklist item is recorded as Probable
 Record the developer's answer for each (kept, reversed, or updated) with the date, here and in `.audit/accepted.md`. One they do not answer stays in force, marked "carried forward, not reconfirmed".
 
 ## 5. Advisory Notes
-Judgment findings from Pass 4. For each: the checklist ID, location, the issue, the concrete simpler alternative, and its rough diff size. These never count against the verdict; the developer may promote any into the queue as P2.
+Judgment findings from Pass 4, plus sub-bar or `Partial` observations from Passes 1–3/Challenge. Order active notes by `Seen` count descending (from `history.mjs record-run --advisories`), then hot files first. For each: the checklist ID, location, `Seen` (`1st time`, or `<n>× since <first-run>`), the issue, the concrete simpler alternative, and its rough diff size. Collapse any `muted` notes into one summary line at the bottom (`<n> muted recurring notes; unmute with history.mjs set-advisory`). These never count against the verdict; the developer may promote any into the queue as P2.
 
 ## 6. Since Last Audit
 Only when there is a previous run. After the challenge finishes, run `scripts/history.mjs record-run` (`references/history.md`) so runs match deterministically by checklist ID, symbol, git renames and recorded fix renames (never by line numbers). Summarize its output:
@@ -268,7 +268,7 @@ Then every claim:
 When the audit is complete, show this in the conversation, in this order. It is the whole picture the developer decides from, so list every queued task and never cut it down to highlights. Keep each row short; the full traces and tool excerpts stay in the report file.
 
 1. **Verdict:** the verdict line.
-2. **At a glance:** task counts by priority (P0, P1, P2), what the challenge did (areas challenged, claims returned, and how many proven problems the first look had missed), how many items are Probable or Unverified, how many decisions are waiting on the developer, how many advisory notes there are, and what was examined: the four passes, the stack references loaded, and how many source files were read out of the inventory (for example "412 of 412 files").
+2. **At a glance:** task counts by priority (P0, P1, P2), what the challenge did (areas challenged, claims returned, and how many proven problems the first look had missed), how many items are Probable or Unverified, how many decisions are waiting on the developer, how many advisory notes there are (naming how many recurred if `advisoryCounts.recurring > 0`, e.g. "12 advisory notes, 3 recurring"), and what was examined: the four passes, the stack references loaded, and how many source files were read out of the inventory (for example "412 of 412 files").
 3. **P0 Critical**, then **P1 High**, then **P2 Hygiene:** one table for each, with every task in queue order. A priority with no tasks says "None".
 
    | Task | What is wrong | Where | Evidence |
