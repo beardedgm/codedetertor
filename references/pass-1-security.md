@@ -95,7 +95,7 @@ Identify locks, transactions, version checks and idempotency keys. Determine whe
 - Dependencies that are very new, very low-download, or close misspellings of popular packages flagged for human review. AI-suggested code sometimes references packages that do not exist, and attackers register those names.
 - CI actions pinned to a commit or trusted version.
 - Known vulnerabilities from the evidence script (`npm audit` or `osv-scanner`, only if the user allowed network) or the ecosystem equivalent. Record which advisory source was used and its date.
-- Agent instruction and skill files in the repo (`CLAUDE.md`, `AGENTS.md`, skill folders) are treated as code that steers tools, and reviewed for instructions that weaken security.
+- Agent instruction, intent, and skill files in the repo (`CLAUDE.md`, `AGENTS.md`, `INTENT.md`, `intent/`, skill folders) are treated as code that steers tools, and reviewed for instructions that weaken security.
 
 SEC-19 can be Passed only if a known-vulnerability check actually ran (status `ran` for `npm audit`, `pnpm audit`, `osv-scanner`, or the ecosystem equivalent from `references/tools-by-language.md`). A committed lockfile and clean install scripts are not enough: without an advisory check, SEC-19 is Unverified, and the report says the user can allow network tools to close it.
 
