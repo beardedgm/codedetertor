@@ -40,6 +40,20 @@ Reconnaissance never touches your code or production systems. Nothing changes wi
 ### 5. Radical honesty about gaps
 Missing analyzers, unexamined files, unconfirmed operational facts, `Probable` leads, and unmodeled stacks stay visibly `Unverified` rather than silently passing. When `codedetective` reports **`Standard met`**, you know exactly what was checked, what tools ran, and what stands behind the claim.
 
+## Constraints & Non-Goals
+
+### Hard Constraints
+- **Read-only reconnaissance:** Audit discovery and multi-pass inspection never modify the audited codebase or touch production systems.
+- **No weakening checks to go green:** Fix Mode never deletes failing assertions, bypasses linters or type checks, loosens security controls, or adds broad suppressions to manufacture a passing verdict.
+- **No secrets or source dumps in audit artifacts:** Saved reports, logs, and history ledgers never record raw credentials, tokens, or pasted source code blocks.
+- **No queue pollution:** `Partial` verifications, borderline speculation, and cosmetic nits never enter the remediation queue as blocking tasks; unexamined code, missing analyzers, and unconfirmed facts stay `Unverified` rather than `Passed`.
+- **No autonomous production or destructive git actions:** `codedetective` requires human approval before modifying code, never merges PRs or force-pushes shared branches unprompted, and never deploys to production.
+
+### Non-Goals
+- **Not a quick single-diff reviewer:** Built for full-repository, multi-pass engineering audits with tracked convergence rather than one-off style feedback on an isolated PR or bug.
+- **Not a substitute for product or architecture design:** Audits correctness, security, and maintainability against engineering standards and declared intent rather than inventing product requirements.
+- **Not a mathematical proof of zero bugs:** Delivers repeatable, tool-backed verification within explicit scope and stated coverage limits.
+
 ## Who It's For
 
 Solo builders, small product studios, and fast-moving engineering teams shipping with AI coding agents who want production-grade security, reliability, and maintainability — without dedicating a team to manual audits, fighting alert fatigue, or settling for "good enough" guesses.
