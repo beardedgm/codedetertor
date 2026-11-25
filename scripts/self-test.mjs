@@ -509,6 +509,72 @@ check('history: warns on ambiguous open (id, file) matches and non-canonical IDs
   assert(lookOne.findings[0].status === 'open' && lookTwo.findings[0].status === 'open', 'existing open entries should remain untouched');
 });
 
+function runAdv(repo, id, findings, advisories) {
+  const fFile = path.join(tmp, `${path.basename(repo)}-${id}-f.json`);
+  const aFile = path.join(tmp, `${path.basename(repo)}-${id}-a.json`);
+  fs.writeFileSync(fFile, JSON.stringify(findings));
+  fs.writeFileSync(aFile, JSON.stringify(advisories));
+  const r = hist(repo, ['record-run', '--run', id, '--findings', fFile, '--advisories', aFile]);
+  assert(r.code === 0 && r.json, `record-run with advisories failed: ${r.out}`);
+  return r.json;
+}
+
+check('history: advisory recurrence increments independently and stays out of findings', () => {
+  const repo = historyRepo('h-adv-count');
+  const A1 = { id: 'QUAL-13', file: 'src/a.js', symbol: 'wrap' };
+  const A2 = { id: 'QUAL-15', file: 'src/b.js', symbol: 'comment' };
+  const A3 = { id: 'QUAL-14', file: 'src/c.js', symbol: 'name' };
+  const out1 = runAdv(repo, 'r1', [], [A1, A2]);
+  assert(out1.advisoryCounts.total === 2 && out1.advisoryCounts.firstTime === 2 && out1.advisoryCounts.recurring === 0, `unexpected r1 counts: ${JSON.stringify(out1.advisoryCounts)}`);
+  assert(out1.findings.length === 0, 'advisories leaked into findings');
+
+  const out2 = runAdv(repo, 'r2', [], [A3, A1]);
+  assert(out2.advisoryCounts.total === 2 && out2.advisoryCounts.recurring === 1 && out2.advisoryCounts.firstTime === 1, `unexpected r2 counts: ${JSON.stringify(out2.advisoryCounts)}`);
+  assert(out2.advisories[0].id === 'QUAL-13' && out2.advisories[0].seenCount === 2 && out2.advisories[0].firstSeen === 'r1', `expected QUAL-13 sorted first with seenCount 2, got ${JSON.stringify(out2.advisories)}`);
+  assert(out2.findings.length === 0 && out2.counts.gone === 0, `unseen advisory should not create gone entry: ${JSON.stringify(out2)}`);
+});
+
+check('history: advisory recurrence survives git mv file renames', () => {
+  const repo = historyRepo('h-adv-move');
+  runAdv(repo, 'r1', [], [{ id: 'QUAL-12', file: 'src/a.js', symbol: 'helper' }]);
+  fs.mkdirSync(path.join(repo, 'lib'));
+  git(repo, 'mv', 'src/a.js', 'lib/a.js');
+  git(repo, 'commit', '-q', '-m', 'move file');
+  const out2 = runAdv(repo, 'r2', [], [{ id: 'QUAL-12', file: 'lib/a.js', symbol: 'helper' }]);
+  assert(out2.advisories.length === 1 && out2.advisories[0].seenCount === 2 && out2.advisories[0].firstSeen === 'r1', `rename broke advisory tracking: ${JSON.stringify(out2.advisories)}`);
+});
+
+check('history: set-advisory mutes and unmutes recurring nits without affecting entries', () => {
+  const repo = historyRepo('h-adv-mute');
+  const A1 = { id: 'QUAL-13', file: 'src/a.js', symbol: 'wrap' };
+  const A2 = { id: 'QUAL-14', file: 'src/b.js', symbol: 'other' };
+  runAdv(repo, 'r1', [], [A1, A2]);
+  const muted = hist(repo, ['set-advisory', '--id', 'QUAL-13', '--at', 'src/a.js#wrap', '--status', 'muted', '--note', 'intentional wrapper']);
+  assert(muted.code === 0 && muted.json.status === 'muted', `mute failed: ${muted.out}`);
+
+  const out2 = runAdv(repo, 'r2', [], [A1, A2]);
+  assert(out2.advisoryCounts.muted === 1 && out2.advisoryCounts.recurring === 1, `unexpected counts after mute: ${JSON.stringify(out2.advisoryCounts)}`);
+  assert(out2.advisories[0].id === 'QUAL-14' && out2.advisories[1].id === 'QUAL-13' && out2.advisories[1].status === 'muted', `muted advisory should sort last: ${JSON.stringify(out2.advisories)}`);
+  assert(out2.findings.length === 0, 'entries affected by advisory mute');
+
+  const unmuted = hist(repo, ['set-advisory', '--id', 'QUAL-13', '--at', 'src/a.js#wrap', '--status', 'active']);
+  assert(unmuted.code === 0 && unmuted.json.status === 'active', `unmute failed: ${unmuted.out}`);
+});
+
+check('history: lookup includes advisories and loads older history.json without advisories key', () => {
+  const repo = historyRepo('h-adv-compat');
+  run(repo, 'r1', [DUP]);
+  const hPath = path.join(repo, '.audit', 'history.json');
+  const raw = JSON.parse(fs.readFileSync(hPath, 'utf8'));
+  delete raw.advisories;
+  fs.writeFileSync(hPath, JSON.stringify(raw, null, 2));
+
+  const out2 = runAdv(repo, 'r2', [DUP], [{ id: 'QUAL-11', file: 'src/a.js', symbol: 'load' }]);
+  assert(out2.advisories.length === 1 && out2.advisories[0].seenCount === 1, `compat run failed: ${JSON.stringify(out2)}`);
+  const look = hist(repo, ['lookup', '--at', 'src/a.js#load']).json;
+  assert(look.findings.length === 1 && Array.isArray(look.advisories) && look.advisories.length === 1 && look.advisories[0].seenCount === 1, `lookup missing advisory: ${JSON.stringify(look)}`);
+});
+
 fs.rmSync(tmp, { recursive: true, force: true });
 const failed = results.filter(([, status]) => status.startsWith('FAILED'));
 for (const [name, status] of results) process.stdout.write(`${status === 'ok' ? 'ok     ' : status === 'skipped' ? 'skipped' : 'FAILED '} ${name}${status.startsWith('FAILED') ? `\n        ${status.slice(8)}` : ''}\n`);

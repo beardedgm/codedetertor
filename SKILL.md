@@ -136,7 +136,7 @@ Also record **Verified Safeguards** (existing defenses that work, so the develop
 
 **Performance.** Static inspection may confirm blocking operations or unbounded work (a synchronous hash in a request handler, a query inside a loop over unbounded input). Do not infer significant latency, throughput loss or session lag from their presence alone. Such a finding may be Confirmed as a correctness issue, but it rises to P1 only with a local measurement or a complete static argument establishing both reachable workload and consequential failure (for example, "this runs on every login request"). Otherwise it stays P2.
 
-**Judgment calls.** Design fit, naming, module depth, over-engineering and comment value are judgment, not fact. Report them as advisory, never as P0 or P1, and each one must state the concrete simpler alternative and its rough diff size. If you cannot describe a simpler alternative, it is not a finding.
+**Judgment calls.** Design fit, naming, module depth, over-engineering and comment value are judgment, not fact. Report them as advisory, never as P0 or P1, and each one must state the concrete simpler alternative and its rough diff size. If you cannot describe a simpler alternative, it is not a finding. Advisory recurrence can be tracked via `history.mjs record-run --advisories` (and optionally muted with `set-advisory`) purely for Section 5 visibility; advisory notes never create tasks or block `Standard met`.
 
 Only Confirmed issues, or preventive hardening you explicitly justify, may enter the remediation queue.
 
@@ -222,7 +222,7 @@ The setup questions asked before Phase 0 (missing tools, network tools, a stale 
 
 Write the report using the structure and task schema in `references/report-template.md`.
 
-**End of the audit: present the full report.** When the challenge is written, the run is complete. Write the run's verified findings and run `scripts/history.mjs record-run` (`references/history.md`) to write the "Since last audit" comparison (route any `circle` findings to Decisions Needed instead of queuing another fix). Fill in Checklist Coverage and Codebase Coverage, and compute the verdict. Then show the report in the conversation, in full, using "Final report presentation" in `references/report-template.md`:
+**End of the audit: present the full report.** When the challenge is written, the run is complete. Write the run's verified findings and advisory notes, and run `scripts/history.mjs record-run` (`references/history.md`, passing `--advisories` when advisory notes exist) to write the "Since last audit" comparison (route any `circle` findings to Decisions Needed instead of queuing another fix) and sort Section 5 by advisory recurrence. Fill in Checklist Coverage and Codebase Coverage, and compute the verdict. Then show the report in the conversation, in full, using "Final report presentation" in `references/report-template.md`:
 1. The verdict line and the counts.
 2. **Every queued task**, grouped P0, then P1, then P2: its ID, what is wrong in plain words, where it is, and the evidence that proves it. Never cut the list down to highlights or "top findings"; the developer is deciding what to fix and needs all of it. Full traces and tool excerpts stay in the report file.
 3. Probable and Unverified items, each with what would settle it.

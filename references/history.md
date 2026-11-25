@@ -5,6 +5,7 @@
 ## Contents
 - Blind audit rule
 - After the challenge: recording a run
+- Advisory note recurrence and muting
 - Planning: checking history before changing code
 - Remediation and delivery: recording each fix
 - Decisions: settling circles and updating status
@@ -24,10 +25,10 @@ At the end of Stage 1 (once the challenge is written and every confirmed finding
 ]
 ```
 
-Then run:
+Then run (adding `--advisories` when Section 5 has advisory notes):
 
 ```bash
-node "${CLAUDE_SKILL_DIR}/scripts/history.mjs" record-run --run <run-id> --findings .audit/runs/<run-id>/scratch/findings.json
+node "${CLAUDE_SKILL_DIR}/scripts/history.mjs" record-run --run <run-id> --findings .audit/runs/<run-id>/scratch/findings.json [--advisories .audit/runs/<run-id>/scratch/advisories.json]
 ```
 
 Use its JSON output to write Section 6 ("Since Last Audit") in `code-health-report.md` and handle each label as follows:
@@ -42,6 +43,19 @@ Use its JSON output to write Section 6 ("Since Last Audit") in `code-health-repo
 | `fixed` | Recorded fixed earlier and not found in this run. |
 | `settled` / `accepted` | Recorded as settled or accepted in `.audit/history.json`. Still verify against today's code under "Earlier decisions are re-evaluated" in `SKILL.md`; if the reason no longer holds, raise it to Decisions Needed. |
 | `gone` / `not-compared` | Previously open, not found this time with no recorded fix (`gone` if the file still exists; `not-compared` if the file disappeared with no git rename). |
+
+## Advisory note recurrence and muting
+
+Pass `--advisories .audit/runs/<run-id>/scratch/advisories.json` (same `{ "id", "file", "symbol" }` array shape) to `record-run` to track how many independent audits have noticed each advisory nit.
+
+- Advisory recurrence lives in its own `advisories` ledger in `.audit/history.json` — it **never** enters `entries`, `comebacks`, `circle`, the remediation queue, or the `Standard met` verdict.
+- An advisory nit absent from a later run simply does not appear in that run's Section 5 (no `gone` tracking).
+- Sort Section 5 using `advisories` from `record-run` (most-recurring active items first) and show each item's `Seen` indicator (`1st time`, or `<seenCount>× since <firstSeen>`). Collapse any `muted` advisories into a single summary line at the bottom of Section 5.
+- If the developer decides a recurring nit is intentional and doesn't want it surfaced in future Section 5 lists, optionally mute (or later unmute) it:
+
+```bash
+node "${CLAUDE_SKILL_DIR}/scripts/history.mjs" set-advisory --id <CHECK-ID> --at <file#symbol> --status <muted|active> --note "<reason>"
+```
 
 ## Planning: checking history before changing code
 
