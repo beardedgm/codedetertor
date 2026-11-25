@@ -55,6 +55,8 @@ Check for earlier fixes, comebacks, or `follows-fix` links at that location, and
 
 ## Remediation and delivery: recording each fix
 
+First run `lookup --at <file>` to check whether an earlier or open entry already exists and match the exact `<file#symbol>` recorded by `record-run` (using one canonical checklist ID per entry, never slash-joined IDs like `PW-03/PW-05`). If `record-fix` gets a slightly different or omitted symbol name, it auto-matches only when there is a single open entry for that `(id, file)`; when multiple open entries share `(id, file)`, it leaves them untouched and emits a warning.
+
 Before committing a proven fix, generate its commit trailer:
 
 ```bash

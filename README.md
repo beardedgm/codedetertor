@@ -144,7 +144,7 @@ Only `fix` ever changes your code, and only after you approve its plan. `plan` n
 | **Pass 2: Performance** | Measured hot paths, blocking work on the event loop, database access patterns, frontend rendering and bundles, long sessions, cleanup, and graceful shutdown. |
 | **Pass 3: Architecture** | Module boundaries, client and server contracts, type rigor, configuration, test integrity, and observability. |
 | **Pass 4: Code quality** | Complexity, duplication, dead code, suppressions, swallowed errors, inconsistent patterns, outdated framework APIs, and patterns typical of AI-generated code. |
-| **Challenge** | A second, independent look at security, performance and architecture. For each area of the code, a fresh reviewer gets the code and the checklists, without the audit's findings, and is told to prove the area does not meet the standard. |
+| **Challenge** | A second, independent look at high-impact security, performance, architecture, and critical-test issues (leaving cosmetic nits and test-style polish aside). For each area of the code, a fresh reviewer gets the code and the checklists, without the audit's findings, and is told to prove the area fails on a real consequence. |
 
 All four passes and the challenge run in one go. The audit pauses only for a question it cannot continue without, and it never offers to plan or fix anything along the way. However serious a finding is, it waits for the full report, where it is listed first.
 
@@ -219,17 +219,17 @@ Every observation gets one label:
 | **Not Applicable** | A checklist item your stack does not have. |
 | **Decision Needed** | The right fix depends on a business choice that is yours to make, such as a rate limit or how long to keep data. Listed as a question for you, not queued as a task until you answer. |
 
-Before any security finding or high-priority task is queued, a separate verifier agent sees only the finding and the code and tries to prove it wrong. Findings that are refuted for a recurring reason go into `.audit/false-positives.md` so they are not raised again.
+Before any security finding or high-priority task is queued, a separate verifier agent sees only the finding and the code and tries to prove it wrong — only an unqualified confirmation enters the queue (`Partial` verifications stay advisory or probable). Findings that are refuted for a recurring reason go into `.audit/false-positives.md` so they are not raised again.
 
 Every checklist item has a stable ID, such as `SEC-03` or `PERF-02`, and every finding and task cites it. That makes two audits of the same repo easy to compare and a repeated finding easy to spot. Many items also carry a caveat: where common advice goes too far, or where a defense only looks like one (an unguessable ID is not access control, a rate limit counted in one server's memory does nothing during a deploy overlap). If your code relies on one of those, that reliance is the finding.
 
-Design and style opinions are reported as advisory notes, never as urgent tasks, and each one must name the simpler alternative.
+Design opinions, cosmetic discrepancies, theoretical self-request quirks, and extra-assertion test polish are reported as advisory notes, never queued as tasks, and each design note names the simpler alternative.
 
 Tasks are prioritized by real consequence:
 
 - **P0 Critical:** a demonstrated security failure, proven data loss, or a severe outage risk.
 - **P1 High:** a measured slowdown, a confirmed race condition, or substantial usability damage.
-- **P2 Hygiene:** types, contracts, duplication, dead code, modernization, and preventive work.
+- **P2 Hygiene:** deterministic tool failures (types, lint, circular imports, dead code, duplication), modernization, and concrete contract, stability, or test-isolation fixes.
 
 ## The verdict: reaching the standard
 
@@ -336,7 +336,7 @@ Fixes are built one task at a time. `fix` builds one and stops; `fix all` keeps 
 
 **Every fix leaves as a pull request.** A fix that is proven but still sitting in your working folder is not finished, so nothing is left behind:
 
-- Each P0 or P1 fix is its own pull request, and each P2 group is one pull request.
+- Each P0 or P1 fix is its own pull request, and each P2 group is one pull request (using `Branch prefix:` from `.audit/context.md`, defaulting to `codedetective/`).
 - It does not wait for the merge. It switches merging on and starts the next fix, and it checks its open pull requests before each new fix, at every stop and on `resume`.
 - If a check fails because of the fix, it fixes the cause and pushes, at most twice, and never by weakening a test or a check. After that it stops and tells you.
 - It waits for merges in only two places: before a new audit that confirms the result, and before calling the run finished.
@@ -372,7 +372,7 @@ If you have switched delivery to "ask", it offers to commit, open a pull request
 | `.audit/runs/<date>/code-health-report.md` | One audit's full report and remediation queue. The audit's memory across sessions. |
 | `.audit/runs/<date>/evidence/` | That audit's raw analyzer output and a summary. |
 | `.audit/runs/<date>/plans/` | That audit's approved plans, one per task or batch. |
-| `.audit/runs/<date>/scratch/` | Throwaway measurement scripts. |
+| `.audit/runs/<date>/scratch/` | Throwaway measurement scripts (pruned at Stage 9 once merged). |
 | `.audit/runs/<date>/external/` | Outside reviews you handed in, saved with secrets removed. |
 | `.audit/current-run` | Which run is current. |
 | `.audit/history.json` | Findings and fixes across runs; spots comebacks, follow-on findings, and circles. |

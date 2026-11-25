@@ -12,7 +12,7 @@ Every audit ends with a challenge, after Pass 4 and before the report is shown. 
 
 ## What it covers
 
-- The checklist items of Passes 1, 2 and 3, and the stack reference items that belong with them: security, data integrity, performance, architecture, contracts and test integrity. The Pass 4 quality items are left out, because they rest on tool output and come out the same way each time.
+- The high-impact checklist items of Passes 1, 2 and 3, and the stack reference items that belong with them: security boundaries, tenant isolation, data loss or corruption, fail-open error handling, concurrency races, resource leaks, broken client/server contracts, and genuinely broken or non-asserting tests on critical paths. Leave out Pass 4 quality items (they rest on tool output), cosmetic or style nits, theoretical edge cases reachable only by a user crafting invalid input against their own local state with no security or stability consequence, and requests to add extra assertions to already-passing non-flaky tests.
 - Every area in the file inventory that holds source code. An area these passes cannot apply to (static assets, documentation) is skipped, and the reason is recorded.
 - All of each area's files. Never a sample, and never only the areas where the first look found problems.
 
@@ -39,7 +39,7 @@ which conditional sections apply, such as AI features or payments>.
 Read every file in the area. Follow data and calls into the rest of the repository wherever you
 need to. Do not read anything under .audit/.
 
-Report every place where the code fails a checklist item. For each one give: the checklist ID; the
+Report every place where the code fails a checklist item with real consequence (security boundary, data loss or corruption, fail-open error, race, leak, broken contract, or an unguarded critical-path test). Skip cosmetic discrepancies, theoretical self-request quirks with no security or stability impact, and test-style polish on passing tests. For each one give: the checklist ID; the
 file and the function or symbol; what is wrong, in one sentence; and the proof, as the exact lines
 or as a trace from where the data enters to where the harm happens, naming every hop. Report only
 what you can point to in the code. A suspicion you cannot prove goes in a separate list, with the
@@ -60,8 +60,9 @@ A challenger's claim is a lead, never a fact, exactly like a claim from an outsi
 | Result | What to do |
 |---|---|
 | **Already in the report** | The same checklist item at the same place, or the same root cause. Note on that task that the challenge also found it. No new task. |
-| **Confirmed, and the first look missed it** | Verify it yourself under the Confirmed tier's rules, with the verifier for a security finding or a P0 or P1 task. Add a task with `SOURCE: challenge (<area>, CH-NN)` and mark it **Missed by the first look**, naming the pass and checklist item that should have caught it. If that item had a Passed row or a Verified Safeguard, the row becomes a Finding. |
+| **Confirmed, and the first look missed it** | Verify it yourself under the Confirmed tier's rules and the P2 materiality floor (`SKILL.md`), with the verifier returning an unqualified `Survives` for any security finding or P0 or P1 task. Add a task with `SOURCE: challenge (<area>, CH-NN)` and mark it **Missed by the first look**, naming the pass and checklist item that should have caught it. If that item had a Passed row or a Verified Safeguard, the row becomes a Finding. |
 | **Refuted** | Record what disproved it, and add that to the item's proof of pass: a pass that survived an attack is a stronger pass. If the reason would recur, add it to `.audit/false-positives.md`. |
+| **Advisory only** | A claim below the P2 materiality floor or a verifier verdict that stays `Partial` after narrowing. Record it in section 5 (Advisory Notes) without adding a task to the queue. |
 | **Probable** or **Unverified** | List it in section 3 with the step that would settle it, and take that step now when it is read-only and possible. |
 
 - A claim that matches a recorded false positive is checked against the current code before it is set aside again.

@@ -446,6 +446,69 @@ check('history: git recovery parses file paths containing spaces', () => {
   assert(labelOf(out, 'QUAL-02') === 'came-back', `label was ${labelOf(out, 'QUAL-02')}`);
 });
 
+check('collect-evidence: fit() in app code is not flagged as test-only, while test files are', () => {
+  const repo = newRepo('ev-fit-app');
+  write(repo, 'src/zoom.js', 'export function zoom(view) { return view.fit(); }\n');
+  write(repo, 'src/zoom.test.js', 'fit("focus", () => {});\n');
+  commit(repo);
+  const r = runEvidence(repo, {});
+  assert(r.code === 0, `collect-evidence exited ${r.code}: ${r.out}`);
+  const hits = JSON.parse(fs.readFileSync(path.join(evidenceDir(repo), 'suppressions.json'), 'utf8'));
+  const onlyHits = hits.filter((h) => h.kind === 'test-only');
+  assert(onlyHits.length === 1 && onlyHits[0].file.replace(/\\/g, '/') === 'src/zoom.test.js', `expected only src/zoom.test.js, got ${JSON.stringify(onlyHits)}`);
+});
+
+check('check-diff: ignores fit() in app code and prose in docs, but still fails in tests and scripts', () => {
+  const repo = historyRepo('diff-fit-doc');
+  const tree = node(repo, CHECK_DIFF, ['--snapshot']).out.trim();
+  write(repo, 'src/zoom.js', 'export function zoom(view) { return view.fit(); }\n');
+  write(repo, 'docs/guide.md', 'Never use --no-verify or fit() in tests.\n');
+  const ok = node(repo, CHECK_DIFF, ['--base', tree]);
+  assert(ok.code === 0 && /FAIL: none/.test(ok.out), `expected pass, got ${ok.out}`);
+  write(repo, 'src/zoom.test.js', 'fit("focus", () => {});\n');
+  const badTest = node(repo, CHECK_DIFF, ['--base', tree]);
+  assert(badTest.code === 1 && /adds a test focus marker/.test(badTest.out), `expected test focus FAIL, got ${badTest.out}`);
+  fs.rmSync(path.join(repo, 'src/zoom.test.js'));
+  write(repo, 'scripts/ci.sh', 'git commit --no-verify -m x\n');
+  const badScript = node(repo, CHECK_DIFF, ['--base', tree]);
+  assert(badScript.code === 1 && /--no-verify/.test(badScript.out), `expected script --no-verify FAIL, got ${badScript.out}`);
+});
+
+check('history: record-fix matches unique open entry on same (id, file) despite symbol drift or omitted symbol', () => {
+  const repo = historyRepo('h-sym-drift');
+  run(repo, 'r1', [{ id: 'QUAL-02', file: 'src/a.js', symbol: 'closedGuard' }]);
+  const fix1 = hist(repo, ['record-fix', '--run', 'r1', '--task', 'P2-01', '--id', 'QUAL-02', '--at', 'src/a.js#closed']);
+  assert(fix1.code === 0 && fix1.json.matchedOpenEntry === 'src/a.js#closedGuard', `expected auto-match, got ${fix1.out}`);
+  const r2 = run(repo, 'r2', []);
+  assert(r2.counts.fixed === 1 && r2.counts.gone === 0, `expected fixed:1 gone:0, got ${JSON.stringify(r2.counts)}`);
+  const r3 = run(repo, 'r3', [{ id: 'QUAL-02', file: 'src/a.js', symbol: 'closedGuard' }]);
+  assert(labelOf(r3, 'QUAL-02') === 'came-back', `expected came-back on original symbol, got ${JSON.stringify(r3)}`);
+
+  const repo2 = historyRepo('h-sym-omit');
+  run(repo2, 'r1', [{ id: 'QUAL-02', file: 'src/a.js', symbol: 'closedGuard' }]);
+  const fix2 = hist(repo2, ['record-fix', '--run', 'r1', '--task', 'P2-01', '--id', 'QUAL-02', '--at', 'src/a.js']);
+  assert(fix2.code === 0 && fix2.json.matchedOpenEntry === 'src/a.js#closedGuard', `expected omit-symbol auto-match, got ${fix2.out}`);
+  const r2b = run(repo2, 'r2', []);
+  assert(r2b.counts.fixed === 1 && r2b.counts.gone === 0, `expected fixed:1 gone:0 when symbol omitted, got ${JSON.stringify(r2b.counts)}`);
+  const r3b = run(repo2, 'r3', [{ id: 'QUAL-02', file: 'src/a.js', symbol: 'closedGuard' }]);
+  assert(labelOf(r3b, 'QUAL-02') === 'came-back', `expected came-back after symbol omitted, got ${JSON.stringify(r3b)}`);
+});
+
+check('history: warns on ambiguous open (id, file) matches and non-canonical IDs', () => {
+  const repo = historyRepo('h-ambig-warn');
+  const r1 = run(repo, 'r1', [
+    { id: 'PW-03/PW-05', file: 'src/a.js', symbol: 'one' },
+    { id: 'PW-03/PW-05', file: 'src/a.js', symbol: 'two' },
+  ]);
+  assert(Array.isArray(r1.warnings) && r1.warnings.some((w) => w.includes('PW-03/PW-05')), `expected non-canonical warning, got ${JSON.stringify(r1)}`);
+  const fix = hist(repo, ['record-fix', '--run', 'r1', '--task', 'P2-01', '--id', 'PW-03/PW-05', '--at', 'src/a.js#three']);
+  assert(fix.code === 0 && !fix.json.matchedOpenEntry, `should not guess across ambiguous entries: ${fix.out}`);
+  assert(Array.isArray(fix.json.warnings) && fix.json.warnings.length >= 2, `expected ambiguity and non-canonical warnings, got ${fix.out}`);
+  const lookOne = hist(repo, ['lookup', '--at', 'src/a.js#one']).json;
+  const lookTwo = hist(repo, ['lookup', '--at', 'src/a.js#two']).json;
+  assert(lookOne.findings[0].status === 'open' && lookTwo.findings[0].status === 'open', 'existing open entries should remain untouched');
+});
+
 fs.rmSync(tmp, { recursive: true, force: true });
 const failed = results.filter(([, status]) => status.startsWith('FAILED'));
 for (const [name, status] of results) process.stdout.write(`${status === 'ok' ? 'ok     ' : status === 'skipped' ? 'skipped' : 'FAILED '} ${name}${status.startsWith('FAILED') ? `\n        ${status.slice(8)}` : ''}\n`);

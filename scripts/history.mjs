@@ -172,8 +172,10 @@ function recordRun() {
 
   const seen = new Set();
   const report = [];
+  const nonCanonicalIds = new Set();
   for (const raw of findings) {
     if (!raw || !raw.id || !raw.file) fail('every finding needs an "id" and a "file"');
+    if (/[\/,\s]/.test(raw.id)) nonCanonicalIds.add(raw.id);
     const loc = parseLoc(raw.symbol ? `${raw.file}#${raw.symbol}` : raw.file);
     let entry = findEntry(data, raw.id, loc);
     const row = { id: raw.id, at: showLoc(loc) };
@@ -243,7 +245,10 @@ function recordRun() {
   save(data);
   const count = (label) => report.filter((r) => r.label === label).length;
   const labels = ['circle', 'came-back', 'follows-fix', 'still-open', 'new', 'first-run', 'settled', 'accepted', 'fixed', 'gone', 'not-compared'];
-  process.stdout.write(`${JSON.stringify({ run, commit, comparedWith: previous ? previous.run : null, counts: Object.fromEntries(labels.map((l) => [l, count(l)])), findings: report }, null, 2)}\n`);
+  const warnings = nonCanonicalIds.size
+    ? [`non-canonical checklist ID(s): ${[...nonCanonicalIds].join(', ')} — record one canonical ID per finding so cross-run matching works reliably`]
+    : [];
+  process.stdout.write(`${JSON.stringify({ run, commit, comparedWith: previous ? previous.run : null, counts: Object.fromEntries(labels.map((l) => [l, count(l)])), findings: report, ...(warnings.length ? { warnings } : {}) }, null, 2)}\n`);
 }
 
 function recordFix() {
@@ -252,7 +257,29 @@ function recordFix() {
   const task = one('task');
   const id = one('id');
   const at = parseLoc(one('at'));
-  const entry = findEntry(data, id, at) || addEntry(data, id, at);
+  const warnings = [];
+  if (/[\/,\s]/.test(id)) warnings.push(`non-canonical checklist ID "${id}" — use one canonical ID per entry`);
+  let matchedOpenEntry;
+  let entry = findEntry(data, id, at);
+  if (!entry) {
+    const openSameFile = data.entries.filter((e) => e.id === id && e.file === at.file && e.status === 'open');
+    if (openSameFile.length === 1) {
+      entry = openSameFile[0];
+      matchedOpenEntry = showLoc({ file: entry.file, symbol: entry.symbol });
+      if (at.symbol) {
+        moveEntry(entry, at);
+      } else {
+        const bare = { file: at.file };
+        if (!entry.aliases.some((a) => sameLoc(a, bare))) entry.aliases.push(bare);
+      }
+    } else {
+      if (openSameFile.length > 1) {
+        const list = openSameFile.map((e) => showLoc({ file: e.file, symbol: e.symbol })).join(', ');
+        warnings.push(`multiple open ${id} entries exist in ${at.file} (${list}); recorded a separate entry for ${showLoc(at)} instead of guessing`);
+      }
+      entry = addEntry(data, id, at);
+    }
+  }
   const renamed = many('renamed').map((text) => {
     const eq = text.indexOf('=');
     if (eq === -1) fail(`--renamed needs old=new, got "${text}"`);
@@ -271,7 +298,7 @@ function recordFix() {
   ));
   data.fixes.push(fix);
   save(data);
-  process.stdout.write(`${JSON.stringify({ recorded: fix, label: `${LABEL} ${run ? `${run}/${task}` : task} ${id} ${showLoc(fix.at)}` }, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify({ recorded: fix, label: `${LABEL} ${run ? `${run}/${task}` : task} ${id} ${showLoc(fix.at)}`, ...(matchedOpenEntry ? { matchedOpenEntry } : {}), ...(warnings.length ? { warnings } : {}) }, null, 2)}\n`);
 }
 
 function setStatus() {

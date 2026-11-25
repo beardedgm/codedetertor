@@ -57,7 +57,7 @@ For any archive or bulk import: path traversal (Zip Slip), decompression size li
 
 **SEC-12 Secrets & Sensitive Data** [A04; ASVS V11, V14]
 Verify secrets, keys, tokens and personal data cannot leak into client bundles, logs, error trackers, analytics, backups, exports or error responses. If a production build is safe to run locally into a temp directory, secret-scan the built output with the evidence script's `--scan-dir` (never a plain text search, which can print the secret); report location and type, never the value. Check how encryption keys are stored and used. Webhook and signature comparisons use timing-safe equality.
-Caveat: removing a secret from the current code does not remove it from git history. A secret that was ever committed needs rotating, and the finding says so.
+Caveat: removing a secret from the current code does not remove it from git history. A secret that was ever committed needs rotating, and the finding says so. Where verified synthetic test fixtures or intentionally blank build variables cause recurring `gitleaks` hits in tests or git history, suggest allowlisting those specific paths or fingerprints in `.gitleaks.toml` or `.gitleaksignore` (with developer approval) rather than re-triaging the same test-fixture count on every run.
 
 **SEC-13 Account & Data Deletion** [A04; ASVS V14]
 When a user or tenant is deleted, trace every store that holds their data: primary database, related collections, object storage (uploaded files), caches, search indexes, analytics, logs and backups. Report stores the deletion path never touches, and soft-deleted data that stays readable.
