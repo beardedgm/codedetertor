@@ -6,7 +6,7 @@ Think of it as a building inspector who also does the repairs. It checks securit
 
 **Best for:** JavaScript and TypeScript web apps. It goes deepest on Node, Express, React, Vite, MongoDB with Mongoose, Cloudflare R2, Render and Playwright. Other stacks get the full general checklists, and the report says where depth is missing.
 
-The goal is what an experienced lead developer would call good clean code: secure, easy to understand, consistent, following current best practice for the versions the project actually uses, and with tests you can trust.
+The goal is what an experienced lead developer would call good clean code: secure, easy to understand, consistent, following current best practice for the versions the project actually uses, and with tests you can trust. For the higher-level philosophy and design vision, see [INTENT.md](INTENT.md).
 
 ## Contents
 
@@ -399,6 +399,7 @@ A few details worth knowing:
 ## Repository layout
 
 ```
+INTENT.md                       High-level vision, philosophy, and success bar
 SKILL.md                        Workflow, commands, evidence rules, safety rules
 references/
   pass-1-security.md            Checklist for each pass
